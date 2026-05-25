@@ -1,0 +1,37 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "deps"
+    labels:
+      - dependencies
+      - dotnet
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "ci"
+    labels:
+      - dependencies
+      - ci
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /segment_reporting
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "deps(js)"
+    labels:
+      - dependencies
+      - javascript
+    open-pull-requests-limit: 5
