@@ -7,20 +7,90 @@ contributing to this project or using it as a reference for your own Emby plugin
 ---
 
 
-## 1. Prerequisites and Dev Environment Setup
+## Prerequisites and Dev Environment Setup
 
 ### Required Software
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| .NET SDK | 6.0 or later | Compiles the project (target is .NET Standard 2.0) |
+| .NET SDK | 8.0 (LTS) or newer | Compiles the project (target is .NET Standard 2.0) |
 | Emby Server | 4.9.x | Runtime host -- required for manual testing |
 | Node.js | 22.x (LTS) | JS minification in Release builds |
 | npm | Bundled with Node.js | Installs rollup/terser for the minification pipeline |
 | Git | Any modern version | Source control |
 
 The plugin targets **.NET Standard 2.0** so it can load into Emby Server's runtime.
-Any modern .NET SDK (6, 7, 8, or 9) can compile it.
+Any in-support .NET SDK can compile it; 8.0 is the current minimum LTS version.
+Newer SDKs (9, 10, etc.) work too, and 8.0+ also runs the xUnit test suite.
+
+### Optional Tooling
+
+None of the tools below are needed to compile and load the plugin. They support
+specific developer workflows: running the test suite, building the docs site,
+refreshing screenshots, or the local git-hook gate. Install only what the
+workflow you are touching requires.
+
+| Tool | Used by | Purpose |
+|------|---------|---------|
+| .NET 8 runtime | `make test` (`dotnet test`) | Runs the xUnit suite. The test project targets `net8.0` with `RollForward`, so a newer runtime (9 or 10) also works; the 8.0 runtime is only needed if you have nothing newer. |
+| GNU Make | every `make` target | Runs the convenience targets in the `Makefile`. CI calls the underlying commands directly, so Make itself is never required. |
+| Python 3 + ProperDocs | `make docs`, `make docs-serve` | Builds and live-serves the documentation site. Install with `make docs-deps` (`pip install -r dev-requirements.txt`). |
+| Playwright + Chromium | `make screenshots` | Headless browser that captures the plugin-page screenshots (`npm install --no-save playwright && npx playwright install chromium`). |
+| ImageMagick (`magick`) | `make screenshots` | Crops the full-page captures into the feature-highlight images. |
+| lefthook | `make hooks-install` | Installs the pre-commit and pre-push git hooks (run via `npx`; declared in `segment_reporting/package.json`). |
+| gitleaks, actionlint | pre-commit hooks | Secret scanning and workflow linting. The hooks print `brew install ...` hints if either is missing. |
+
+The git hooks are opt-in (you enable them with `make hooks-install`), but once
+installed they are not optional per commit: every commit runs lefthook, which
+invokes `dotnet format`, ESLint, gitleaks, and actionlint, and every push runs
+the full build/format/lint gate. The `dotnet format` and ESLint steps rely on
+the .NET SDK and the `npm install` you already have; gitleaks and actionlint are
+the only extra installs the hooks add. You can bypass a single run with
+`git commit --no-verify` / `git push --no-verify` (you are then skipping the
+checks CI will still enforce).
+
+**Agent / contributor tooling (suggested, not required):** This repo is friendly
+to working with Claude Code and its plugins, but none of that is a requirement -
+the build, tests, docs, and hooks all run with the standard toolchain above.
+Some contributors also use claude-kit, a personal Claude Code toolkit whose
+scripts are symlinked under `~/.claude/` for repo automation (safe pushing, PR
+watching, CodeRabbit-budget tracking, worktree cleanup). It is a convenience
+only: the `Makefile` gate and hook targets run scripts vendored in this repo
+(`scripts/pre-push-gate.sh`, `scripts/check-hooks.sh`), so you never need
+claude-kit or Claude Code to build, test, or contribute.
+
+### Developer Commands (Makefile)
+
+A `Makefile` at the repo root wraps the common dotnet / npm / properdocs / script
+commands so you do not have to remember each one. Run `make help` for the list.
+The Makefile is a convenience only: CI (`.github/workflows/build.yml`) invokes
+the underlying commands directly, so the targets can never silently drift from
+what CI runs. GNU Make is the only prerequisite, and even that is optional - you
+can always run the underlying command shown below by hand.
+
+| Target | Underlying command | Purpose |
+|--------|--------------------|---------|
+| `make help` | (self-documenting grep) | List every target with its description (the default target). |
+| `make restore` | `dotnet restore` | Restore NuGet dependencies. |
+| `make build` | `dotnet build` (Debug) | Build the solution; skips JS minification. |
+| `make build-release` | `dotnet build --configuration Release` | Release build; minifies JS, so it needs Node. |
+| `make test` | `dotnet test` | Run the xUnit suite (needs a .NET 8-or-newer runtime). |
+| `make format` | `dotnet format` | Apply C# code formatting in place. |
+| `make format-check` | `dotnet format --verify-no-changes` | Verify formatting without writing changes (matches CI). |
+| `make lint` | `npm run lint:js` | ESLint the page JavaScript. |
+| `make gate` | `bash scripts/pre-push-gate.sh` | Full CI-parity pre-push gate (Release build + format-check + lint). |
+| `make hooks` | `bash scripts/check-hooks.sh` | Verify the git hooks are wired to lefthook. |
+| `make hooks-install` | `npx lefthook install` + `fix-hooks.mjs` | Install the pre-commit and pre-push git hooks. |
+| `make docs-deps` | `pip install -r dev-requirements.txt` | Install the docs toolchain (ProperDocs + Material). |
+| `make docs` | `properdocs build --strict` | Build the documentation site (fails on broken links). |
+| `make docs-serve` | `properdocs serve` | Serve the docs locally with live reload. |
+| `make screenshots` | `node scripts/capture-screenshots.mjs` | Capture and anonymize page screenshots (needs a running Emby plus `.env`). |
+| `make clean` | `dotnet clean` + remove `bin`/`obj`/`site` | Remove build output and the generated docs site. |
+
+Bruno API tests, fuzzing, leak detection, and the UAT Emby harness will arrive
+as `make bruno` / `fuzz` / `leak-check` / `uat-up` / `uat-down` alongside the
+test-infrastructure Phase 2/3 work, so those targets ship with the scripts they
+drive rather than as empty stubs.
 
 ### Building the Plugin
 
@@ -35,7 +105,7 @@ The compiled DLL is written to `segment_reporting/bin/Release/netstandard2.0/seg
 **Debug builds** skip JS minification. **Release builds** run a three-step MSBuild
 pipeline (`NpmInstall` -> `MinifyJS` -> `RestoreJS`) that minifies every `.js` file
 in `Pages/` before compilation and restores the originals afterward. This requires
-Node.js to be installed. See the [CI/CD Pipeline](#7-cicd-pipeline) section for details.
+Node.js to be installed. See the [CI/CD Pipeline](#cicd-pipeline) section for details.
 
 If you only need to iterate on C# code, use `Debug` configuration to skip the
 Node.js dependency:
@@ -54,8 +124,11 @@ dotnet build segment_reporting/segment_reporting.csproj -c Debug
 4. Navigate to **Settings > Plugins** to confirm "Segment Reporting" appears.
 5. Run the initial sync: **Settings > Scheduled Tasks > Sync Segments > Run Now**.
 
-There are no automated tests. The plugin depends on Emby Server internals that
-cannot be mocked outside a running server instance. All testing is manual.
+Pure logic (the custom-query validators and marker-type helpers) is covered by
+an xUnit suite you can run with `make test` (`dotnet test`). Anything that
+touches Emby Server internals cannot be mocked outside a running server, so that
+surface is still validated manually. See the [Testing](#testing) section for the
+full picture.
 
 ### Automatic Deploy via Environment Variable
 
@@ -81,7 +154,7 @@ export EMBY_PLUGINS_DIR="/opt/emby-server/programdata/plugins"
 
 ---
 
-## 2. Architecture Overview
+## Architecture Overview
 
 ### Design Principles
 
@@ -178,7 +251,7 @@ serialized through `_dbLock`.
 
 ---
 
-## 3. SQLite Schema and Data Model
+## SQLite Schema and Data Model
 
 The database file is `segment_reporting.db`, stored in Emby's data directory
 (typically alongside other plugin databases). The repository manages four tables.
@@ -317,7 +390,7 @@ Reporting queries use `ItemType` to branch between series-based aggregation
 
 ---
 
-## 4. API Reference
+## API Reference
 
 ### API Overview
 
@@ -368,7 +441,7 @@ curl "http://localhost:8096/emby/segment_reporting/library_summary?api_key=YOUR_
 These endpoints power the drill-down navigation: Dashboard -> Library -> Series
 -> Season -> Episodes.
 
-#### GET /segment_reporting/library_summary
+**`GET /segment_reporting/library_summary`**{ #get-segment_reportinglibrary_summary }
 
 Returns per-library coverage statistics for the dashboard.
 
@@ -409,7 +482,7 @@ curl -H "X-Emby-Token: $KEY" \
 
 ---
 
-#### GET /segment_reporting/series_list
+**`GET /segment_reporting/series_list`**{ #get-segment_reportingseries_list }
 
 Returns series and/or movies in a library with coverage stats. The response
 shape depends on the library's content type.
@@ -456,7 +529,7 @@ curl -H "X-Emby-Token: $KEY" \
 
 ---
 
-#### GET /segment_reporting/season_list
+**`GET /segment_reporting/season_list`**{ #get-segment_reportingseason_list }
 
 Returns seasons for a series with coverage stats.
 
@@ -496,7 +569,7 @@ curl -H "X-Emby-Token: $KEY" \
 
 ---
 
-#### GET /segment_reporting/episode_list
+**`GET /segment_reporting/episode_list`**{ #get-segment_reportingepisode_list }
 
 Returns episodes with full segment tick values. Can be queried by season or by
 series (for a flat all-episodes view).
@@ -559,7 +632,7 @@ curl -H "X-Emby-Token: $KEY" \
 
 ### Single-Item Endpoints
 
-#### GET /segment_reporting/item_segments
+**`GET /segment_reporting/item_segments`**{ #get-segment_reportingitem_segments }
 
 Returns segment detail for a single item (episode or movie).
 
@@ -590,7 +663,7 @@ curl -H "X-Emby-Token: $KEY" \
 
 These endpoints write through to Emby first, then update the SQLite cache.
 
-#### POST /segment_reporting/update_segment
+**`POST /segment_reporting/update_segment`**{ #post-segment_reportingupdate_segment }
 
 Updates or adds a single segment marker on one item.
 
@@ -628,7 +701,7 @@ curl -X POST -H "X-Emby-Token: $KEY" \
 
 ---
 
-#### POST /segment_reporting/delete_segment
+**`POST /segment_reporting/delete_segment`**{ #post-segment_reportingdelete_segment }
 
 Removes a single segment marker from an item.
 
@@ -670,7 +743,7 @@ All bulk endpoints cap at **500 items per request** (`MaxBulkItems`). They
 process items individually, collecting successes and failures rather than
 rolling back on error.
 
-#### POST /segment_reporting/bulk_apply
+**`POST /segment_reporting/bulk_apply`**{ #post-segment_reportingbulk_apply }
 
 Copies segment markers from a source item to one or more target items.
 
@@ -710,7 +783,7 @@ curl -X POST -H "X-Emby-Token: $KEY" \
 
 ---
 
-#### POST /segment_reporting/bulk_delete
+**`POST /segment_reporting/bulk_delete`**{ #post-segment_reportingbulk_delete }
 
 Removes segment markers from multiple items.
 
@@ -746,7 +819,7 @@ curl -X POST -H "X-Emby-Token: $KEY" \
 
 ---
 
-#### POST /segment_reporting/bulk_set_credits_end
+**`POST /segment_reporting/bulk_set_credits_end`**{ #post-segment_reportingbulk_set_credits_end }
 
 Sets `CreditsStart` to each item's runtime minus an offset. Useful for batch-
 setting credits markers at a fixed distance from the end of episodes.
@@ -796,7 +869,7 @@ curl -X POST -H "X-Emby-Token: $KEY" \
 
 ### Sync and Cache Endpoints
 
-#### POST /segment_reporting/sync_now
+**`POST /segment_reporting/sync_now`**{ #post-segment_reportingsync_now }
 
 Triggers an immediate full sync by queuing the `TaskSyncSegments` scheduled task.
 
@@ -823,7 +896,7 @@ curl -X POST -H "X-Emby-Token: $KEY" \
 
 ---
 
-#### GET /segment_reporting/sync_status
+**`GET /segment_reporting/sync_status`**{ #get-segment_reportingsync_status }
 
 Returns information about the most recent sync.
 
@@ -864,7 +937,7 @@ curl -H "X-Emby-Token: $KEY" \
 
 ---
 
-#### POST /segment_reporting/force_rescan
+**`POST /segment_reporting/force_rescan`**{ #post-segment_reportingforce_rescan }
 
 Drops and rebuilds the entire cache from scratch. **Destructive** -- all cached
 data is deleted before the sync task is queued.
@@ -893,7 +966,7 @@ curl -X POST -H "X-Emby-Token: $KEY" \
 
 ---
 
-#### GET /segment_reporting/cache_stats
+**`GET /segment_reporting/cache_stats`**{ #get-segment_reportingcache_stats }
 
 Returns cache size information and last sync details.
 
@@ -928,7 +1001,7 @@ curl -H "X-Emby-Token: $KEY" \
 
 ### Custom Query Endpoints
 
-#### POST /segment_reporting/submit_custom_query
+**`POST /segment_reporting/submit_custom_query`**{ #post-segment_reportingsubmit_custom_query }
 
 Executes a read-only SQL query against the SQLite cache. Only `SELECT`, `PRAGMA`,
 and `EXPLAIN` statements are allowed.
@@ -989,7 +1062,7 @@ curl -X POST -H "X-Emby-Token: $KEY" \
 
 ---
 
-#### GET /segment_reporting/canned_queries
+**`GET /segment_reporting/canned_queries`**{ #get-segment_reportingcanned_queries }
 
 Returns the list of built-in example queries for the Custom Query page.
 
@@ -1017,7 +1090,7 @@ curl -H "X-Emby-Token: $KEY" \
 
 ### Saved Query Endpoints
 
-#### GET /segment_reporting/saved_queries
+**`GET /segment_reporting/saved_queries`**{ #get-segment_reportingsaved_queries }
 
 Returns all user-saved custom queries.
 
@@ -1043,7 +1116,7 @@ curl -H "X-Emby-Token: $KEY" \
 
 ---
 
-#### POST /segment_reporting/saved_queries
+**`POST /segment_reporting/saved_queries`**{ #post-segment_reportingsaved_queries }
 
 Creates or updates a saved query. If `id` is provided and > 0, the existing
 query with that ID is updated. Otherwise a new query is created.
@@ -1080,7 +1153,7 @@ curl -X POST -H "X-Emby-Token: $KEY" \
 
 ---
 
-#### DELETE /segment_reporting/saved_queries/{Id}
+**`DELETE /segment_reporting/saved_queries/{Id}`**{ #delete-segment_reportingsaved_queriesid }
 
 Deletes a saved query by ID.
 
@@ -1105,7 +1178,7 @@ curl -X DELETE -H "X-Emby-Token: $KEY" \
 
 ### Preferences Endpoints
 
-#### GET /segment_reporting/preferences
+**`GET /segment_reporting/preferences`**{ #get-segment_reportingpreferences }
 
 Returns all display preferences as a key-value map.
 
@@ -1137,7 +1210,7 @@ curl -H "X-Emby-Token: $KEY" \
 
 ---
 
-#### POST /segment_reporting/preferences
+**`POST /segment_reporting/preferences`**{ #post-segment_reportingpreferences }
 
 Saves display preferences. Only non-null parameters are written; omitted
 parameters are left unchanged.
@@ -1171,7 +1244,7 @@ curl -X POST -H "X-Emby-Token: $KEY" \
 
 ### Info Endpoints
 
-#### GET /segment_reporting/plugin_info
+**`GET /segment_reporting/plugin_info`**{ #get-segment_reportingplugin_info }
 
 Returns the plugin name, version, and description.
 
@@ -1194,7 +1267,7 @@ curl -H "X-Emby-Token: $KEY" \
 
 ---
 
-## 5. Web UI Development Guide
+## Web UI Development Guide
 
 The plugin embeds six HTML pages into the compiled DLL. Emby serves them at
 runtime through its configuration page system. This section explains how the
@@ -1868,7 +1941,7 @@ rendering from a static data array, API call for plugin metadata.
 
 ---
 
-## 6. Scheduled Tasks
+## Scheduled Tasks
 
 Emby's task system runs background work on a configurable schedule. The plugin
 registers two tasks by implementing the `IScheduledTask` interface. Emby
@@ -1976,7 +2049,7 @@ Tasks can be triggered in three ways:
 
 ---
 
-## 7. CI/CD Pipeline
+## CI/CD Pipeline
 
 ### Workflow Overview
 
@@ -2086,7 +2159,7 @@ Emby plugins directory when the `EMBY_PLUGINS_DIR` environment variable is set:
 Set this variable to your Emby plugins path (e.g.,
 `C:\ProgramData\Emby-Server\plugins`) and every build will automatically deploy
 the DLL. See [Automatic Deploy via Environment Variable](#automatic-deploy-via-environment-variable)
-in Section 1 for setup details.
+in the Prerequisites section for setup details.
 
 ### Code Quality Enforcement
 
@@ -2151,7 +2224,7 @@ Follow these steps to create a release:
 
 ---
 
-## 8. Testing
+## Testing
 
 Pure logic (the custom-query security validators and marker-type helpers) is
 covered by an xUnit unit-test project; everything that needs a live Emby server
@@ -2356,30 +2429,34 @@ Depending on what was changed, verify the following:
 
 ---
 
-## 9. Screenshots
+## Screenshots
 
 This section documents the screenshot capture process, anonymization patterns,
 and cropping commands used to produce the images in `docs/Screenshots/`.
 
 ### Screenshot Inventory
 
-| File | Viewport | Croppable | What it shows |
-|------|----------|-----------|---------------|
-| `dashboard.png` | 2561x1398 | Yes | Summary cards, coverage chart, library table |
+| File | Viewport | Crop | What it shows |
+|------|----------|------|---------------|
+| `dashboard.png` | 2561x1398 | static | Summary cards, coverage chart, library table |
 | `library-browse.png` | 2561x1398 | -- | Library drill-down with series/movie list |
-| `series-detail.png` | 1460x1000 | Yes | Episode table with Actions dropdown/submenu |
+| `series-detail.png` | 1460x1000 | static | Episode table with Actions dropdown/submenu |
+| `inline-edit.png` | 1460x1000 | dynamic | Episode row in inline edit mode |
+| `bulk-select.png` | 1460x1000 | dynamic | Multi-select with selection counter |
+| `copy-banner.png` | 1460x1000 | dynamic | Copy-source banner + Apply Source button |
 | `custom-query.png` | 2561x1398 | -- | Custom query page overview |
-| `query-builder.png` | 2561x1398 | Yes | Visual query builder (Match through Limit) |
+| `query-builder.png` | 2561x1398 | static | Visual query builder (Match through Limit) |
 | `query-autocomplete.png` | 2561x1398 | -- | Tag input autocomplete suggestions |
-| `query-results.png` | 1460x1000 | Yes | Results table with Actions dropdown |
+| `query-results.png` | 1460x1000 | static | Results table with Actions dropdown |
 | `settings.png` | 2561x1398 | -- | Plugin settings page |
+| `palette-preview.png` | 1460x1000 | dynamic | Custom color pickers + live preview chart |
 | `about.png` | 2561x1398 | -- | About/info page |
 
 Full-page screenshots show the complete Emby interface (sidebar, header,
-content). Cropped variants (generated on demand via the commands in
-[ImageMagick Crop Commands](#imagemagick-crop-commands)) remove the sidebar and
-focus on a specific feature. Crop files are not committed -- generate them as
-needed and reference with a `*-crop.png` suffix.
+content). Cropped variants focus on a specific feature and are committed
+alongside their full-page originals. **Static** crops use fixed `WxH+X+Y`
+geometry defined in the `CROPS` constant; **dynamic** crops are measured
+at capture time from the target element's bounding box via `saveFeatureShot()`.
 
 ### Automated Capture Script
 
@@ -2397,10 +2474,23 @@ npx playwright install chromium
 **Usage:**
 
 ```bash
-export EMBY_API_KEY="your-admin-api-key"
-export EMBY_URL="http://localhost:8096"   # optional, this is the default
+# Minimum required variables
+export EMBY_USER="admin"                   # admin username (required for SPA login)
+export EMBY_PASSWORD="password"            # admin password
+
+# Optional
+export EMBY_URL="http://localhost:8096"    # default if unset
+export EMBY_API_KEY="your-api-key"        # passed as X-Emby-Token for non-SPA requests
+export SCREENSHOTS_DIR="/tmp/sr-smoke"    # override output dir (default: docs/Screenshots/)
+export CAPTURE_ONLY="inline-edit,settings" # comma-separated subset; omit to capture all
+
 node scripts/capture-screenshots.mjs
 ```
+
+`EMBY_USER` (and `EMBY_PASSWORD`) are required because the plugin pages use
+Emby's `ApiClient`, which needs an authenticated user session. `EMBY_API_KEY`
+is optional but speeds up non-SPA asset requests. Use `SCREENSHOTS_DIR` with a
+temp path for smoke tests so committed images are not overwritten accidentally.
 
 The script requires a running Emby server with the plugin installed and synced.
 ImageMagick (`magick` CLI) must be on PATH for cropping.
@@ -2408,18 +2498,24 @@ ImageMagick (`magick` CLI) must be on PATH for cropping.
 ### Data Anonymization
 
 Screenshots must never contain real media library names. The capture script
-applies DOM manipulation after each page loads to replace real data with
-fictional names.
+intercepts all `segment_reporting/` API responses at the network layer and
+rewrites name/title fields before the page sees them, so both the DOM tables
+and Chart.js charts (which hold data in module-closure variables unreachable
+from `page.evaluate`) render fictional names from the start.
 
 **Anonymization layers:**
 
 | Layer | Technique | Fictional data source |
 |-------|-----------|----------------------|
-| Library names | Replace table cells and Chart.js labels | TV Shows, Movies, Documentaries, Kids TV |
-| Series names | TreeWalker text replacement + consistent mapping | Crimson Meridian, Silver Horizon, Starfield Academy, ... |
-| Episode names | Table cell iteration (3rd column in episode tables) | The Awakening, Shadow Protocol, Convergence, ... |
-| Item IDs | Replace `data-itemid` attrs and table cells | Random 4-digit numbers |
-| Chart labels | `Chart.getChart(canvas)` → update labels → `chart.update('none')` | Same mappings as above |
+| Library names | Network route: rewrite `*Name/*Title` fields matching `library` | `FICTIONAL_LIBRARY_POOL` (20 entries) |
+| Series names | Network route: rewrite `*Name/*Title` fields matching `series` | `FICTIONAL_SERIES` (16 entries) |
+| Episode/movie names | Network route: rewrite remaining `*Name/*Title` fields by `ItemType` | `FICTIONAL_EPISODES` / `FICTIONAL_MOVIES` |
+| Season names | Network route: replace with `Season N` (preserves SeasonNumber) | Derived from row data |
+| Custom query matrix | Network route: anonymize by column header pattern (`Columns`/`Rows`) | Same pools as above |
+| Unknown name fields | Network route: generic fallback pool (fail-safe for new API fields) | `FICTIONAL_GENERIC` (8 entries) |
+
+The mapping is deterministic per real value (using a `Map`), so the same real
+name maps to the same fictional name across all endpoints in one run.
 
 **Fictional series names:**
 
@@ -2472,8 +2568,9 @@ These issues affect screenshot automation and manual Playwright MCP workflows:
 
 ### ImageMagick Crop Commands
 
-These are the crop geometries for each feature-highlight screenshot. Run from
-the repository root:
+**Static crops** use fixed geometry defined in the `CROPS` constant in
+`capture-screenshots.mjs`. The capture script applies them automatically; these
+commands are here for manual re-cropping only:
 
 ```bash
 # Dashboard: coverage chart + library table (removes sidebar)
@@ -2494,22 +2591,40 @@ values assume the viewport sizes listed in the Screenshot Inventory table above.
 If the Emby sidebar width changes (currently ~345px at 2561-wide viewport,
 ~230px at 1460-wide), the X offset will need adjustment.
 
+**Dynamic crops** (`inline-edit`, `bulk-select`, `copy-banner`,
+`palette-preview`) are measured at capture time from the target element's
+bounding box using `saveFeatureShot(page, name, boxFn, pad)`. There are no
+fixed geometry values - re-run the capture script to regenerate them:
+
+```bash
+export EMBY_USER=... EMBY_PASSWORD=... EMBY_URL=...
+CAPTURE_ONLY=inline-edit,bulk-select,copy-banner,palette-preview \
+  node scripts/capture-screenshots.mjs
+```
+
 ### Retaking Screenshots
 
 When a UI change alters the appearance of a screenshot:
 
-1. **Automated (preferred):** Run the capture script. It handles anonymization
-   and cropping automatically.
-2. **Manual via Playwright MCP:** Navigate to the page, apply anonymization via
-   `browser_evaluate`, open any menus needed for the shot, then use
-   `browser_take_screenshot`. Apply crops with ImageMagick afterwards.
+1. **Automated (preferred):** Use `CAPTURE_ONLY` to limit the run to specific
+   pages, and `SCREENSHOTS_DIR` with a temp path for a dry run before
+   overwriting committed images:
+   ```bash
+   SCREENSHOTS_DIR=/tmp/sr-smoke CAPTURE_ONLY=settings \
+     EMBY_USER=... EMBY_PASSWORD=... node scripts/capture-screenshots.mjs
+   # Inspect, then re-run without SCREENSHOTS_DIR to commit
+   ```
+2. **Manual via Playwright MCP:** Navigate to the page, use
+   `browser_take_screenshot`. For pages that need an open Actions menu, use
+   `openActionsMenu()` (or the in-page dispatch pattern from that function) to
+   avoid hover unreliability in headless mode.
 3. **Update docs:** If the screenshot shows a feature that changed (new button,
    renamed label, different layout), update the corresponding docs (see
    Documentation Maintenance in `CLAUDE.md`).
 
 ---
 
-## 10. Reference Links
+## Reference Links
 
 ### Upstream Projects
 

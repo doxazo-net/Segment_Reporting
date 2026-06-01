@@ -78,6 +78,9 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/sydlexius/Segment_Reporting
 
+extra_css:
+  - stylesheets/extra.css
+
 nav:
   - Home: index.md
   - User Guide: USER_GUIDE.md

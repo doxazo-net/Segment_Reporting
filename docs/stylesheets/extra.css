@@ -1,0 +1,65 @@
+/* In-page table of contents (right sidebar) readability (issue #62).
+ *
+ * Make top-level (major) section entries larger so the hierarchy reads at a
+ * glance; nested subsection entries keep the default small size and gain a
+ * little extra indentation on top of the theme's default. */
+
+/* Full-width, consistent tables. Material's `table` component wraps each table
+ * at runtime in `.md-typeset__scrollwrap > .md-typeset__table` (the inner
+ * wrapper is `display: inline-block` so wide tables can scroll horizontally).
+ * That wrapper shrinks to its content, so narrow tables collapse and stacked
+ * tables look ragged. Make the wrapper a full-width block and let the table
+ * fill it; none of the docs tables are wide enough to need the scroll. */
+.md-typeset__table {
+  display: block;
+  width: 100%;
+}
+
+.md-typeset table:not([class]) {
+  display: table;
+  width: 100%;
+}
+
+/* Inline code in table cells holds identifiers and function signatures.
+ * Material's default `word-break: break-word` on inline code lets a long single
+ * identifier wrap by a character or two in a narrow auto-sized column (e.g.
+ * `customColorCredits`). Restore normal word breaking: a bare identifier (no
+ * internal spaces) then stays whole and `table-layout: auto` widens the column
+ * to fit it, while a signature with spaces, like
+ * `createSegmentChart(Chart, ctx, ...)`, still wraps at the spaces and leaves
+ * the description column room. */
+.md-typeset table:not([class]) td code,
+.md-typeset table:not([class]) th code {
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* Rename + restyle the in-page ToC title. Material's default English label is
+ * "Table of contents"; the project wants proper case "Table of Contents",
+ * slightly larger than the major section entries (0.8rem) so it reads as the
+ * heading of the list. CSS cannot edit a text node, so we zero the label's
+ * font-size to collapse the default text and inject the replacement via
+ * ::after; the desktop icon span is sized in rem and is unaffected. */
+.md-nav--secondary .md-nav__title {
+  font-size: 0;
+}
+
+.md-nav--secondary .md-nav__title::after {
+  content: "Table of Contents";
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.md-nav--secondary .md-nav__list > .md-nav__item > .md-nav__link {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.md-nav--secondary .md-nav__item .md-nav__item {
+  padding-left: 0.7rem;
+}
+
+.md-nav--secondary .md-nav__item .md-nav__item .md-nav__link {
+  font-size: 0.62rem;
+  font-weight: 400;
+}
