@@ -46,7 +46,11 @@ for h in pre-commit pre-push; do
     if [ ! -f "$stub" ]; then
         fail ".git hook '$h' is not installed ($stub missing)"
     fi
-    if ! grep -q "lefthook" "$stub"; then
+    # Match the actual delegation line the lefthook stub emits
+    # (`call_lefthook run "<hook>"`), not just any mention of the word
+    # "lefthook" in a comment. The literal string "lefthook run" never
+    # appears in the generated stub, so this is the correct specific pattern.
+    if ! grep -q "call_lefthook run" "$stub"; then
         fail ".git hook '$h' exists but does not delegate to lefthook ($stub)"
     fi
 done
@@ -54,6 +58,9 @@ done
 # 3. The pre-push gate script must be present and runnable.
 if [ ! -f "scripts/pre-push-gate.sh" ]; then
     fail "scripts/pre-push-gate.sh is missing (pre-push stage would error)"
+fi
+if [ ! -x "scripts/pre-push-gate.sh" ]; then
+    fail "scripts/pre-push-gate.sh exists but is not executable (chmod +x scripts/pre-push-gate.sh)"
 fi
 
 echo "OK: hooks wired -- lefthook.yml valid, pre-commit + pre-push stubs delegate to lefthook, pre-push-gate present."
