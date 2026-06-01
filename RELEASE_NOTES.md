@@ -1,6 +1,16 @@
 <!-- markdownlint-disable MD024 -->
 # Segment Reporting - Release Notes
 
+## [v1.3.0.1](https://github.com/sydlexius/Segment_Reporting/releases/tag/v1.3.0.1) - Security Maintenance
+
+### Fixed
+
+- **Cross-site scripting hardening in the palette designer tool** (CodeQL #1) - The internal color palette designer now validates that pasted colors are valid hex values before rendering them, closing a potential script-injection path.
+
+### Security
+
+- **Dependency updates** - Bumped build-time JavaScript dependencies to patched releases: flatted 3.3.3 to 3.4.2 (#83) and picomatch 4.0.3 to 4.0.4 (#85). These are development-only dependencies and do not affect the shipped plugin.
+
 ## [v1.3.0.0](https://github.com/sydlexius/Segment_Reporting/releases/tag/v1.3.0.0) - Theme-Aware Palettes and Actions Overhaul
 
 ### Improved
