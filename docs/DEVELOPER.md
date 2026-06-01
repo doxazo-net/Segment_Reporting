@@ -15,7 +15,7 @@ contributing to this project or using it as a reference for your own Emby plugin
 |------|---------|---------|
 | .NET SDK | 8.0 (LTS) or newer | Compiles the project (target is .NET Standard 2.0) |
 | Emby Server | 4.9.x | Runtime host -- required for manual testing |
-| Node.js | 22.x (LTS) | JS minification in Release builds |
+| Node.js | 24.x (LTS) | JS minification in Release builds |
 | npm | Bundled with Node.js | Installs rollup/terser for the minification pipeline |
 | Git | Any modern version | Source control |
 
@@ -2064,9 +2064,9 @@ branches. Runs on `ubuntu-latest`.
 
 **Steps:**
 
-1. **Checkout** -- `actions/checkout@v4`
-2. **Setup .NET** -- `actions/setup-dotnet@v4` with .NET 8.0.x
-3. **Setup Node.js** -- `actions/setup-node@v4` with Node 22
+1. **Checkout** -- `actions/checkout@v6` (SHA-pinned)
+2. **Setup .NET** -- `actions/setup-dotnet@v5` (SHA-pinned) with .NET 8.0.x
+3. **Setup Node.js** -- `actions/setup-node@v6` (SHA-pinned) with Node 24
 4. **Install JS build tools** -- `npm ci --prefix segment_reporting`
 5. **Minify JS** -- `npm run build:js --prefix segment_reporting` (esbuild
    minification of the 7 custom JS files)
