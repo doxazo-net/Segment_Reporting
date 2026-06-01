@@ -7,8 +7,16 @@
 // lefthook installs needs the same fix, so process each stage we configure.
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
+import { execFileSync } from "child_process";
+import { join } from "path";
 
-const hookPaths = [".git/hooks/pre-commit", ".git/hooks/pre-push"];
+// Resolve the real hooks directory from git rather than hardcoding .git/hooks.
+// In linked worktrees `.git` is a file and hooks live elsewhere, and a custom
+// core.hooksPath redirects them entirely; git rev-parse reports the truth.
+const hooksDir = execFileSync("git", ["rev-parse", "--git-path", "hooks"], {
+    encoding: "utf8",
+}).trim();
+const hookPaths = ["pre-commit", "pre-push"].map((h) => join(hooksDir, h));
 
 for (const hookPath of hookPaths) {
     if (!existsSync(hookPath)) {
