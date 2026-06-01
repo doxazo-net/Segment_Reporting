@@ -402,6 +402,17 @@ function onThemeChange(idx, value) {
   render();
 }
 
+// Escape HTML meta-characters so DOM-derived values (color swatches read from
+// inputs) cannot be reinterpreted as markup when assigned via innerHTML.
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function buildRoleUI() {
   var container = document.getElementById('roleAssignment');
   var html = '<h3>Assign Roles and Theme Scope</h3><div class="role-grid">';
@@ -409,8 +420,8 @@ function buildRoleUI() {
     var role = roleMap[i] || 'unused';
     var scope = themeMap[i] || 'both';
     html += '<div class="role-card" id="rc' + i + '">';
-    html += '<div class="swatch" style="background:' + color + ';border:1px solid rgba(0,0,0,0.15)"></div>';
-    html += '<div class="hex">' + color + '</div>';
+    html += '<div class="swatch" style="background:' + esc(color) + ';border:1px solid rgba(0,0,0,0.15)"></div>';
+    html += '<div class="hex">' + esc(color) + '</div>';
     // Role dropdown
     html += '<select onchange="onRoleChange(' + i + ',this.value)">';
     html += '<option value="unused"' + (role === 'unused' ? ' selected' : '') + '>-- unused --</option>';
@@ -436,8 +447,8 @@ function buildRoleUI() {
   // Always show the "none" color as a locked card at the end
   var noneColor = getNoneColor();
   html += '<div class="role-card" style="border-color:#aaa;background:#f9f9f9;">';
-  html += '<div class="swatch" style="background:' + noneColor + ';border:1px solid rgba(0,0,0,0.15)"></div>';
-  html += '<div class="hex">' + noneColor + '</div>';
+  html += '<div class="swatch" style="background:' + esc(noneColor) + ';border:1px solid rgba(0,0,0,0.15)"></div>';
+  html += '<div class="hex">' + esc(noneColor) + '</div>';
   html += '<select disabled style="opacity:0.6"><option selected>none (locked)</option></select></div>';
   html += '</div>';
   container.innerHTML = html;
