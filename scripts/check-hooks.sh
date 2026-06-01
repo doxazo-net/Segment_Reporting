@@ -46,6 +46,9 @@ for h in pre-commit pre-push; do
     if [ ! -f "$stub" ]; then
         fail ".git hook '$h' is not installed ($stub missing)"
     fi
+    if [ ! -x "$stub" ]; then
+        fail ".git hook '$h' exists but is not executable ($stub)"
+    fi
     # Match the actual delegation line the lefthook stub emits
     # (`call_lefthook run "<hook>"`), not just any mention of the word
     # "lefthook" in a comment. The literal string "lefthook run" never
