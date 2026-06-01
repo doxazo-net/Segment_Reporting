@@ -29,7 +29,12 @@ import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const SCREENSHOTS_DIR = path.resolve(__dirname, '..', 'docs', 'Screenshots');
+// Output directory. Defaults to docs/Screenshots; override with SCREENSHOTS_DIR
+// to capture into a scratch directory (e.g. a smoke test) without overwriting
+// the committed images.
+const SCREENSHOTS_DIR = process.env.SCREENSHOTS_DIR
+    ? path.resolve(process.env.SCREENSHOTS_DIR)
+    : path.resolve(__dirname, '..', 'docs', 'Screenshots');
 
 const EMBY_URL = process.env.EMBY_URL || 'http://localhost:8096';
 const API_KEY = process.env.EMBY_API_KEY;
@@ -122,6 +127,49 @@ const CROPS = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** Merge multiple bounding boxes into their union. Null entries are ignored. */
+function unionBbox(...boxes) {
+    const valid = boxes.filter(Boolean);
+    if (!valid.length) return null;
+    const x1 = Math.min(...valid.map(b => b.x));
+    const y1 = Math.min(...valid.map(b => b.y));
+    const x2 = Math.max(...valid.map(b => b.x + b.width));
+    const y2 = Math.max(...valid.map(b => b.y + b.height));
+    return { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+}
+
+/**
+ * Save a full-page screenshot and a dynamically-measured crop.
+ *
+ * boxFn is an async function called with the Playwright page; it must return a
+ * bounding box { x, y, width, height } in CSS pixels (== image pixels at DSF 1).
+ * pad is added on all four sides before the crop.
+ */
+async function saveFeatureShot(page, name, boxFn, pad = 40) {
+    const fullPath = path.join(SCREENSHOTS_DIR, `${name}.png`);
+    await page.screenshot({ path: fullPath, fullPage: false });
+    console.log(`  Saved ${name}.png`);
+
+    let box;
+    try { box = await boxFn(page); } catch (e) { box = null; }
+    if (!box) {
+        console.warn(`  Warning: could not measure bbox for ${name}-crop, skipping crop.`);
+        return;
+    }
+
+    const x = Math.max(0, Math.round(box.x - pad));
+    const y = Math.max(0, Math.round(box.y - pad));
+    const w = Math.round(box.width + pad * 2);
+    const h = Math.round(box.height + pad * 2);
+    const cropPath = path.join(SCREENSHOTS_DIR, `${name}-crop.png`);
+    try {
+        execSync(`magick "${fullPath}" -crop ${w}x${h}+${x}+${y} +repage "${cropPath}"`);
+        console.log(`  Saved ${name}-crop.png (${w}x${h})`);
+    } catch {
+        console.warn(`  Warning: ImageMagick crop failed for ${name}`);
+    }
+}
 
 function pluginPageUrl(pageName) {
     return `${EMBY_URL}/web/configurationpage?name=${pageName}`;
@@ -349,6 +397,27 @@ async function saveScreenshot(page, name) {
 // Page capture functions
 // ---------------------------------------------------------------------------
 
+/**
+ * Navigate from the dashboard to the first library then the first series.
+ * Leaves the page on the series detail view with the episode table loaded.
+ */
+async function gotoFirstSeries(page) {
+    await page.setViewportSize(VIEWPORT_DETAIL);
+    await navigateTo(page, 'segment_dashboard', 'segmentDashboardPage');
+    const firstLibRow = await page.$('#segmentDashboardPage table tbody tr');
+    if (!firstLibRow) throw new Error('No library rows found on dashboard');
+    await firstLibRow.click();
+    await page.waitForSelector('#segmentLibraryPage', { timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(3500);
+    const firstSeriesRow = await page.$('#segmentLibraryPage table tbody tr');
+    if (!firstSeriesRow) throw new Error('No series rows found on library page');
+    await firstSeriesRow.click();
+    await page.waitForSelector('#segmentSeriesPage', { timeout: 20000 }).catch(() => {});
+    await page.waitForTimeout(3500);
+    // Allow episode table and auto-expanded first season to finish rendering.
+    await page.waitForTimeout(1500);
+}
+
 async function captureDashboard(page) {
     console.log('Capturing dashboard...');
     await page.setViewportSize(VIEWPORT_FULL);
@@ -383,29 +452,7 @@ async function captureLibraryBrowse(page) {
 
 async function captureSeriesDetail(page) {
     console.log('Capturing series-detail...');
-    await page.setViewportSize(VIEWPORT_DETAIL);
-
-    // Navigate dashboard -> library -> series via row clicks.
-    await navigateTo(page, 'segment_dashboard', 'segmentDashboardPage');
-    const firstRow = await page.$('#segmentDashboardPage table tbody tr');
-    if (firstRow) {
-        await firstRow.click();
-        await page.waitForSelector('#segmentLibraryPage', { timeout: 20000 }).catch(() => {});
-        await page.waitForTimeout(3500);
-    }
-    // Library rows carry data-series-id; the first cell is the series name.
-    const seriesRow = await page.$('#segmentLibraryPage table tbody tr');
-    if (seriesRow) {
-        await seriesRow.click();
-        await page.waitForSelector('#segmentSeriesPage', { timeout: 20000 }).catch(() => {});
-        await page.waitForTimeout(3500);
-    } else {
-        console.warn('  No series rows found, skipping series-detail');
-        return;
-    }
-
-    // Wait for episode table to load (first season auto-expands).
-    await page.waitForTimeout(1500);
+    await gotoFirstSeries(page);
 
     // Names are anonymized at the network layer; no DOM pass needed.
 
@@ -431,6 +478,117 @@ async function captureSeriesDetail(page) {
     await page.waitForTimeout(300);
 
     await saveScreenshot(page, 'series-detail');
+}
+
+async function captureInlineEdit(page) {
+    console.log('Capturing inline-edit...');
+    await gotoFirstSeries(page);
+
+    // Open the Actions menu on the first episode row.
+    const actionBtn = page.locator('#segmentSeriesPage .btn-actions').first();
+    await actionBtn.click({ timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(600);
+
+    // Click the Edit item to put the row into editing mode.
+    const editItem = page.locator('.actions-menu').getByText(/^Edit$/).first();
+    await editItem.click({ timeout: 3000 }).catch(() => {});
+    await page.waitForTimeout(500);
+
+    await page.waitForSelector('#segmentSeriesPage tr.editing', { timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(300);
+
+    await saveFeatureShot(page, 'inline-edit', async (pg) => {
+        const thead = await pg.locator('#segmentSeriesPage table thead').first().boundingBox();
+        const editRow = await pg.locator('#segmentSeriesPage tr.editing').first().boundingBox();
+        return unionBbox(thead, editRow);
+    }, 16);
+}
+
+async function captureBulkSelect(page) {
+    console.log('Capturing bulk-select...');
+    await gotoFirstSeries(page);
+
+    // Check 3 checkboxes to show the selection count update.
+    const cbs = page.locator('#segmentSeriesPage .row-select-cb');
+    const cbCount = await cbs.count();
+    for (let i = 0; i < Math.min(3, cbCount); i++) {
+        await cbs.nth(i).check().catch(() => {});
+        await page.waitForTimeout(150);
+    }
+    await page.waitForTimeout(500);
+
+    await saveFeatureShot(page, 'bulk-select', async (pg) => {
+        const bulkRow = await pg.locator('#segmentSeriesPage .bulk-action-row').first().boundingBox();
+        const rows = pg.locator('#segmentSeriesPage table tbody tr[data-item-id]');
+        const rCount = await rows.count();
+        const boxes = [bulkRow];
+        for (let i = 0; i < Math.min(4, rCount); i++) {
+            boxes.push(await rows.nth(i).boundingBox());
+        }
+        return unionBbox(...boxes);
+    }, 16);
+}
+
+async function captureCopyBanner(page) {
+    console.log('Capturing copy-banner...');
+    await gotoFirstSeries(page);
+
+    // Open the Actions menu on the first episode row, then trigger Copy > Intros
+    // via in-page dispatch (headless hover is unreliable for CSS submenus).
+    const actionBtn = page.locator('#segmentSeriesPage .btn-actions').first();
+    await actionBtn.click({ timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(600);
+
+    await page.evaluate(() => {
+        const copyItem = Array.from(document.querySelectorAll('div')).find(el =>
+            el.textContent.trim().replace(/[▶\s]+$/, '') === 'Copy'
+            && el.nextElementSibling && el.nextElementSibling.tagName === 'DIV'
+        );
+        if (copyItem) {
+            copyItem.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+            copyItem.nextElementSibling.style.display = 'block';
+            const introsItem = Array.from(copyItem.nextElementSibling.querySelectorAll('div'))
+                .find(el => el.textContent.trim() === 'Intros');
+            if (introsItem) introsItem.click();
+        }
+    });
+    await page.waitForTimeout(600);
+
+    await page.waitForSelector('#bulkSourceBanner', { state: 'visible', timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(300);
+
+    await saveFeatureShot(page, 'copy-banner', async (pg) => {
+        const banner = await pg.locator('#bulkSourceBanner').first().boundingBox();
+        const rows = pg.locator('#segmentSeriesPage table tbody tr[data-item-id]');
+        const rCount = await rows.count();
+        const boxes = [banner];
+        for (let i = 0; i < Math.min(3, rCount); i++) {
+            boxes.push(await rows.nth(i).boundingBox());
+        }
+        return unionBbox(...boxes);
+    }, 16);
+}
+
+async function capturePalettePreview(page) {
+    console.log('Capturing palette-preview...');
+    await page.setViewportSize(VIEWPORT_DETAIL);
+    await navigateTo(page, 'segment_settings', 'segmentSettingsPage');
+
+    // Select "Custom" to reveal the custom color pickers and live preview chart.
+    await page.evaluate(() => {
+        const sel = document.querySelector('#prefChartPalette');
+        if (!sel) return;
+        const opt = Array.from(sel.options).find(o => o.value === 'custom' || o.text.toLowerCase().includes('custom'));
+        if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+    });
+    await page.waitForTimeout(800);
+
+    await saveFeatureShot(page, 'palette-preview', async (pg) => {
+        const dropdown = await pg.locator('#prefChartPalette').boundingBox();
+        const custom = await pg.locator('#customColorsPanel').boundingBox();
+        const preview = await pg.locator('#palettePreviewContainer').boundingBox();
+        return unionBbox(dropdown, custom, preview);
+    }, 24);
 }
 
 async function captureCustomQuery(page) {
@@ -487,6 +645,73 @@ async function captureQueryAutocomplete(page) {
     await saveScreenshot(page, 'query-autocomplete');
 }
 
+/**
+ * Reliably open a row's Actions menu (and optionally expand a named submenu) by
+ * driving the in-page handlers directly. Headless hover() is unreliable for the
+ * CSS-driven submenu, and the menu's mouseleave timer can hide it before the
+ * screenshot - dispatching the events in-page avoids both. The trigger is the
+ * per-row `.btn-actions` button (falls back to a button whose text starts with
+ * "Actions"); the submenu opens via its parent item's mouseenter -> showSub().
+ */
+async function openActionsMenu(page, pageId, submenuLabel) {
+    // A REAL Playwright click on a per-row Actions button opens the menu (a
+    // synthetic in-page click does not reliably trigger it). Use a middle row
+    // so the menu does not collide with the table header.
+    // Scroll the data table near the top so the opened menu lands in-viewport
+    // (a bottom-row menu opens below the fold and is not captured).
+    await page.evaluate((pid) => {
+        const tbl = document.querySelector('#' + pid + ' table');
+        if (tbl) tbl.scrollIntoView({ block: 'start' });
+    }, pageId).catch(() => {});
+    await page.waitForTimeout(300);
+    const btns = page.locator(`#${pageId} .btn-actions`);
+    const n = await btns.count();
+    if (n > 0) {
+        await btns.nth(0).click({ timeout: 5000 }).catch(() => {});
+        await page.waitForTimeout(700);
+    }
+    const state = await page.evaluate((label) => {
+        const btnActions = document.querySelectorAll('.btn-actions').length;
+        const anyActionsBtn = Array.from(document.querySelectorAll('button')).filter((b) => b.textContent.trim().startsWith('Actions')).length;
+        const hasMenu = !!Array.from(document.querySelectorAll('*')).find((el) => el.childElementCount <= 2 && el.textContent.trim() === 'Set Credits to End');
+        const spanByText = (txt) => Array.from(document.querySelectorAll('span'))
+            .find((s) => s.textContent.trim() === txt);
+        let submenuShown = false;
+        if (label) {
+            // The submenu parent item's text is "<label> <arrow>"; find it and
+            // force its sibling submenu div visible (reliable; no hover needed).
+            const item = Array.from(document.querySelectorAll('div')).find((el) =>
+                el.childElementCount <= 2
+                && el.textContent.trim().replace(/[▶\s]+$/, '') === label
+                && el.nextElementSibling && el.nextElementSibling.tagName === 'DIV');
+            if (item) {
+                item.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+                item.nextElementSibling.style.display = 'block';
+                submenuShown = true;
+            }
+        }
+        // The menu can open off the right edge of the wide results table.
+        // Reposition it into the viewport so the screenshot captures it.
+        let repositioned = false;
+        const marker = Array.from(document.querySelectorAll('div'))
+            .find((el) => el.childElementCount <= 2 && el.textContent.trim() === 'Set Credits to End');
+        if (marker) {
+            let menu = marker;
+            while (menu && menu !== document.body && getComputedStyle(menu).position !== 'absolute') menu = menu.parentElement;
+            if (menu && menu !== document.body) {
+                menu.style.position = 'fixed';
+                menu.style.left = '780px';
+                menu.style.top = '170px';
+                menu.style.right = 'auto';
+                repositioned = true;
+            }
+        }
+        return { btnActions, anyActionsBtn, hasMenu, submenuShown, repositioned };
+    }, submenuLabel);
+    console.log('  menu:', JSON.stringify(state));
+    await page.waitForTimeout(300);
+}
+
 async function captureQueryResults(page) {
     console.log('Capturing query-results...');
     await page.setViewportSize(VIEWPORT_DETAIL);
@@ -511,19 +736,9 @@ async function captureQueryResults(page) {
 
     // Query results are anonymized at the network layer; no DOM pass needed.
 
-    // Open Actions dropdown on the 3rd row to show the submenu
-    const actionsButtons = await page.$$('#segmentCustomQueryPage table tbody tr td:last-child, #segmentCustomQueryPage .queryResultTable tbody tr .btnActions');
-    if (actionsButtons.length >= 3) {
-        await actionsButtons[2].click({ timeout: 3000 }).catch(() => {});
-        await page.waitForTimeout(500);
-        // Hover over Delete to expand submenu (best-effort; submenu layout may
-        // not always be hoverable in headless mode).
-        const deleteItem = await page.$('text=Delete');
-        if (deleteItem) {
-            await deleteItem.hover({ timeout: 3000 }).catch(() => {});
-            await page.waitForTimeout(300);
-        }
-    }
+    // Open the Actions menu on the first results row and expand the Delete
+    // submenu (Intros / Credits / Both) for the feature-highlight crop.
+    await openActionsMenu(page, 'segmentCustomQueryPage', 'Delete');
 
     await saveScreenshot(page, 'query-results');
 }
@@ -568,15 +783,26 @@ async function main() {
         // bare configurationpage URL is not authenticated and never loads data.
         await login(page);
 
-        await captureDashboard(page);
-        await captureLibraryBrowse(page);
-        await captureSeriesDetail(page);
-        await captureCustomQuery(page);
-        await captureQueryBuilder(page);
-        await captureQueryAutocomplete(page);
-        await captureQueryResults(page);
-        await captureSettings(page);
-        await captureAbout(page);
+        // CAPTURE_ONLY=query-results[,settings,...] limits the run to specific
+        // pages (comma-separated). Unset captures all.
+        const only = process.env.CAPTURE_ONLY
+            ? process.env.CAPTURE_ONLY.split(',').map((s) => s.trim())
+            : null;
+        const want = (name) => !only || only.includes(name);
+
+        if (want('dashboard')) await captureDashboard(page);
+        if (want('library-browse')) await captureLibraryBrowse(page);
+        if (want('series-detail')) await captureSeriesDetail(page);
+        if (want('inline-edit')) await captureInlineEdit(page);
+        if (want('bulk-select')) await captureBulkSelect(page);
+        if (want('copy-banner')) await captureCopyBanner(page);
+        if (want('custom-query')) await captureCustomQuery(page);
+        if (want('query-builder')) await captureQueryBuilder(page);
+        if (want('query-autocomplete')) await captureQueryAutocomplete(page);
+        if (want('query-results')) await captureQueryResults(page);
+        if (want('settings')) await captureSettings(page);
+        if (want('palette-preview')) await capturePalettePreview(page);
+        if (want('about')) await captureAbout(page);
 
         console.log('\nAll screenshots captured successfully.');
     } catch (err) {

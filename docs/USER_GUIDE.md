@@ -8,7 +8,7 @@ your media libraries.
 ---
 
 
-## 1. Getting Started
+## Getting Started
 
 ### What This Plugin Does
 
@@ -70,7 +70,7 @@ Clicking it opens the Dashboard - the main entry point for all plugin features.
 
 ---
 
-## 2. Dashboard
+## Dashboard
 
 The Dashboard gives you a high-level overview of segment coverage across all
 your libraries.
@@ -105,6 +105,10 @@ bar shows four categories:
 
 Click any bar in the chart to navigate directly into that library.
 
+![Coverage chart and library table](Screenshots/dashboard-crop.png)
+
+*The coverage chart and library details table (sidebar cropped out).*
+
 ### Library Table
 
 Below the chart is a table listing each library with columns for total items,
@@ -134,7 +138,7 @@ and **About**.
 
 ---
 
-## 3. Library Browsing
+## Library Browsing
 
 ### Navigating to a Library
 
@@ -216,7 +220,7 @@ Both sections include the full Actions dropdown described above.
 
 ---
 
-## 4. Series Detail
+## Series Detail
 
 Click a series name from the library view to see its full season and episode
 breakdown.
@@ -267,9 +271,13 @@ the intro sequence.
 
 ---
 
-## 5. Editing Segments
+## Editing Segments
 
 ### Inline Editing
+
+![Actions dropdown](Screenshots/series-detail-crop.png)
+
+*The Actions dropdown on an episode row: Edit, Copy, Delete, and Set Credits to End.*
 
 To edit an episode's segment timestamps:
 
@@ -279,6 +287,11 @@ To edit an episode's segment timestamps:
    values. Empty markers show `00:00:00.000` as a placeholder.
 4. Type the new timestamp(s).
 5. Click **Save** to apply, or **Cancel** to discard.
+
+![Inline editing](Screenshots/inline-edit-crop.png)
+
+*An episode row in edit mode: each timestamp cell becomes a text input field,
+with Save and Cancel buttons in the Actions column.*
 
 When you save, the plugin writes the change directly to Emby's chapter system.
 The edit takes effect immediately - if you play the episode, Emby will use the
@@ -308,6 +321,10 @@ If you enter an invalid format, the plugin will show an error and will not save.
 
 ### Deleting a Segment
 
+![Delete submenu](Screenshots/delete-submenu-crop.png)
+
+*The Delete submenu: remove Intros, Credits, or Both from an item.*
+
 To remove markers from an episode:
 
 1. Click the **Actions** button on the episode row.
@@ -335,7 +352,7 @@ scanning these items for credits that do not exist.
 
 ---
 
-## 6. Bulk Operations
+## Bulk Operations
 
 Bulk operations let you make changes to many episodes at once instead of
 editing them one by one. They are available on the Series Detail page.
@@ -348,6 +365,11 @@ episode in that season.
 
 When episodes are selected, the bulk action buttons update to show the count
 (e.g., "Delete Intros (5)" instead of "Delete All Intros").
+
+![Multi-select](Screenshots/bulk-select-crop.png)
+
+*Three episodes selected - the selection counter updates in real time and bulk
+actions apply only to the checked rows.*
 
 - If **no episodes are selected**, bulk actions apply to the entire season.
 - If **some episodes are selected**, bulk actions apply only to the selected
@@ -366,6 +388,12 @@ multiple episodes share the same intro or credits timing.
    - **Both** - copies all markers
 4. A banner appears at the top confirming the source episode and the copy type
    (e.g., "Copying intros from Episode 3").
+
+   ![Copy banner](Screenshots/copy-banner-crop.png)
+
+   *The copy banner shows the source episode and reveals the "Apply Source to
+   All" button in each season's bulk action bar.*
+
 5. Select the target episodes using checkboxes (or leave all unchecked to apply
    to the entire season).
 6. Click **Apply Intros to Selected**, **Apply Credits to Selected**, or
@@ -404,7 +432,7 @@ the nightly sync) to see the newly detected markers in Segment Reporting.
 
 ---
 
-## 7. Custom Queries
+## Custom Queries
 
 The Custom Query page lets you search and analyze your segment data using a
 visual query builder or by writing SQL directly.
@@ -455,6 +483,10 @@ The visual builder lets you construct queries without writing SQL:
 7. A **live SQL preview** at the bottom shows the query that will be executed.
 8. Click **Run Query** to execute.
 
+![Query builder area](Screenshots/query-builder-crop.png)
+
+*The builder area without the sidebar: condition rows, column pills, ORDER BY, and LIMIT.*
+
 The builder fully round-trips - if you load a saved query, the builder will
 populate itself from the SQL so you can modify it visually.
 
@@ -494,6 +526,10 @@ supports:
 - **Timestamp formatting** - tick values are automatically displayed in the
   human-readable `HH:MM:SS.fff` format
 
+![Query results table](Screenshots/query-results-crop.png)
+
+*The results table with bulk action buttons and a per-row Actions menu.*
+
 ### CSV Export
 
 Click the **Export CSV** button above the results table to download the query
@@ -515,7 +551,7 @@ delete a saved query, load it and click **Delete**.
 
 ---
 
-## 8. Settings
+## Settings
 
 The Settings page controls how the plugin looks and behaves.
 
@@ -551,6 +587,11 @@ exact colors for:
 
 A **live preview chart** updates immediately as you change palettes or colors,
 so you can see exactly how your charts will look before saving.
+
+![Custom palette preview](Screenshots/palette-preview-crop.png)
+
+*The Custom Colors panel with four color pickers and the live preview chart
+showing how the selected colors render across library categories.*
 
 ### Table Display Options
 
@@ -596,7 +637,7 @@ Two maintenance buttons:
 
 ---
 
-## 9. Maintenance
+## Maintenance
 
 ### Scheduled Tasks
 
@@ -678,7 +719,7 @@ to run.
 
 ---
 
-## 10. About
+## About
 
 ![About](Screenshots/about.png)
 
