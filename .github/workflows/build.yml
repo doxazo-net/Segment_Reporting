@@ -100,48 +100,11 @@ jobs:
           name: segment_reporting-dll
           path: ./release-assets
 
-      - name: Extract release notes
-        id: notes
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-
-          # Extract the section for this version from RELEASE_NOTES.md
-          # Matches from "## [vX.Y.Z]" or "## vX.Y.Z" up to the next "---" or next "## "
-          NOTES=$(awk -v tag="$TAG" '
-            BEGIN { found=0 }
-            /^## / {
-              if (found) exit
-              line = $0
-              sub(/^## /, "", line)
-              # Strip a leading markdown link wrapper: [vX.Y.Z](url) -> vX.Y.Z
-              sub(/^\[/, "", line)
-              sub(/\].*/, "", line)
-              split(line, a, " - ")
-              ver = a[1]
-              if (ver == tag || ver == substr(tag, 2)) { found=1; next }
-            }
-            /^---$/ { if (found) exit; next }
-            found { print }
-          ' RELEASE_NOTES.md)
-
-          if [ -z "$NOTES" ]; then
-            NOTES="See commit history for changes in this release."
-          fi
-
-          # Append full changelog link
-          PREV_TAG=$(git tag --sort=-v:refname | grep -A1 "^${TAG}$" | tail -1)
-          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "$TAG" ]; then
-            printf '%s\n\n**Full Changelog**: https://github.com/%s/compare/%s...%s\n' \
-              "$NOTES" "${{ github.repository }}" "$PREV_TAG" "$TAG" > release-notes.md
-          else
-            printf '%s\n' "$NOTES" > release-notes.md
-          fi
-
       - name: Create Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
         with:
           files: ./release-assets/**/*.dll
-          body_path: release-notes.md
+          generate_release_notes: true
           draft: false
           prerelease: false
         env:
