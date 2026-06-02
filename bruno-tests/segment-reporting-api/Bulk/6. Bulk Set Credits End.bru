@@ -14,6 +14,18 @@ headers {
   X-Emby-Token: {{apiKey}}
 }
 
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("bulk_set_credits_end reports counts", function() {
+    const b = res.getBody();
+    expect(b).to.have.property("succeeded");
+    expect(b).to.have.property("failed");
+  });
+}
+
 docs {
   ## Bulk Set Credits End
 
