@@ -74,8 +74,9 @@ uat-deploy: ## UAT: build + docker cp the DLL into the UAT container, restart
 uat-seed: ## UAT: generate media, create libraries, sync, set markers (idempotent)
 	bash scripts/uat/seed.sh
 
-uat-test: ## UAT: run the Bruno API assertions against UAT
-	cd bruno-tests/segment-reporting-api && npx --yes @usebruno/cli run --env Local
+uat-test: ## UAT: run the Bruno API assertions against UAT (reads apiKey from .env)
+	cd bruno-tests/segment-reporting-api && npx --yes @usebruno/cli run --env Local \
+		--env-var "apiKey=$$(grep -E '^EMBY_UAT_API_KEY=' ../../.env | head -1 | cut -d= -f2- | tr -d '\r\"')"
 
 bruno: uat-test ## UAT: alias for uat-test
 
