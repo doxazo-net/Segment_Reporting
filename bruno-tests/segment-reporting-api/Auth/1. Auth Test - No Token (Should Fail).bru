@@ -10,6 +10,16 @@ get {
   auth: none
 }
 
+assert {
+  res.status: gte 400
+}
+
+tests {
+  test("missing token is rejected", function() {
+    expect([401, 403]).to.include(res.status);
+  });
+}
+
 docs {
   ## Authentication Test
 

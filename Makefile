@@ -4,9 +4,9 @@
 # CI (.github/workflows/build.yml) invokes those commands directly, so the
 # Makefile can never silently drift the build. Run `make help` for the list.
 #
-# Bruno API tests, fuzzing, leak detection, and the UAT Emby harness arrive as
-# `make bruno|fuzz|leak-check|uat-up|uat-down` alongside the #106 Phase 2/3 work,
-# so their targets ship with the scripts they drive (not before).
+# The UAT Emby harness ships here as `make uat-deploy|uat-seed|uat-test|bruno|
+# uat-clean|uat` (Phase 2, #106) driving scripts/uat/*. Fuzzing and leak
+# detection (`make fuzz|leak-check`) remain Phase 3 and ship with their work.
 
 SLN := Segment_Reporting.sln
 NPM_PREFIX := segment_reporting
@@ -14,7 +14,8 @@ NPM_PREFIX := segment_reporting
 .DEFAULT_GOAL := help
 
 .PHONY: help restore build build-release test format format-check lint gate \
-        hooks hooks-install docs docs-deps docs-serve screenshots clean
+        hooks hooks-install docs docs-deps docs-serve screenshots clean \
+        uat-deploy uat-seed uat-test bruno uat-clean uat
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -66,3 +67,20 @@ clean: ## Remove build output and the generated docs site
 	dotnet clean $(SLN) || true
 	find . -type d \( -name bin -o -name obj \) -exec rm -rf {} + 2>/dev/null || true
 	rm -rf site
+
+uat-deploy: ## UAT: build + docker cp the DLL into the UAT container, restart
+	bash scripts/uat/deploy.sh
+
+uat-seed: ## UAT: generate media, create libraries, sync, set markers (idempotent)
+	bash scripts/uat/seed.sh
+
+uat-test: ## UAT: run the Bruno API assertions against UAT (reads apiKey from .env)
+	cd bruno-tests/segment-reporting-api && npx --yes @usebruno/cli run --env Local \
+		--env-var "apiKey=$$(grep -E '^EMBY_UAT_API_KEY=' ../../.env | head -1 | cut -d= -f2- | tr -d '\r\"')"
+
+bruno: uat-test ## UAT: alias for uat-test
+
+uat-clean: ## UAT: remove synthetic libraries/media, reset Local.bru IDs
+	bash scripts/uat/clean.sh
+
+uat: uat-deploy uat-seed uat-test ## UAT: full chain (deploy -> seed -> test)

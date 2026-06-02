@@ -14,6 +14,27 @@ headers {
   X-Emby-Token: {{apiKey}}
 }
 
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("library_summary exposes coverage buckets", function() {
+    const rows = res.getBody();
+    expect(Array.isArray(rows)).to.be.true;
+    if (rows.length > 0) {
+      expect(rows[0]).to.have.property("LibraryId");
+      expect(rows[0]).to.have.property("LibraryName");
+      expect(rows[0]).to.have.property("TotalItems");
+      expect(rows[0]).to.have.property("WithIntro");
+      expect(rows[0]).to.have.property("WithCredits");
+      expect(rows[0]).to.have.property("WithBoth");
+      expect(rows[0]).to.have.property("WithNeither");
+      expect(rows[0]).to.have.property("ContentType");
+    }
+  });
+}
+
 docs {
   ## Get Library Summary
 

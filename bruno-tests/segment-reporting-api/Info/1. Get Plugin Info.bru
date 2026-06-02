@@ -14,6 +14,19 @@ headers {
   X-Emby-Token: {{apiKey}}
 }
 
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("plugin_info carries a version", function() {
+    const b = res.getBody();
+    expect(b).to.have.property("name");
+    expect(b).to.have.property("version");
+    expect(b).to.have.property("description");
+  });
+}
+
 docs {
   ## Get Plugin Info
 

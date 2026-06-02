@@ -14,6 +14,16 @@ headers {
   X-Emby-Token: {{apiKey}}
 }
 
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("delete_segment reports success", function() {
+    expect(res.getBody()).to.have.property("success", true);
+  });
+}
+
 docs {
   ## Delete Segment
 

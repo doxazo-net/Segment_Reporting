@@ -14,6 +14,22 @@ headers {
   X-Emby-Token: {{apiKey}}
 }
 
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("custom_query returns columns, rows, and message", function() {
+    const b = res.getBody();
+    expect(b).to.have.property("Columns");
+    expect(Array.isArray(b.Columns)).to.be.true;
+    expect(b).to.have.property("Rows");
+    expect(Array.isArray(b.Rows)).to.be.true;
+    expect(b).to.have.property("Message");
+    expect(b.Message).to.be.a("string");
+  });
+}
+
 docs {
   ## Submit Custom Query
 

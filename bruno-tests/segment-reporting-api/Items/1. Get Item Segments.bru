@@ -14,6 +14,23 @@ headers {
   X-Emby-Token: {{apiKey}}
 }
 
+assert {
+  res.status: eq 200
+}
+
+tests {
+  // Per-marker tick fields are only present when that specific marker exists
+  // (HasIntro can be true from IntroEnd alone), so assert stable structural
+  // fields; exact tick values are verified on fresh data by seed.sh.
+  test("item_segments reflects Has flags", function() {
+    const b = res.getBody();
+    expect(b).to.have.property("ItemId");
+    expect(b).to.have.property("ItemType");
+    expect(b).to.have.property("HasIntro");
+    expect(b).to.have.property("HasCredits");
+  });
+}
+
 docs {
   ## Get Item Segments
 
