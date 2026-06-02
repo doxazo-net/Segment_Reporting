@@ -1047,24 +1047,28 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                     return helpers.applyBulkSet([changed])
                         .then(function (res) {
                             helpers.hideLoading();
-                            if (res && (res.error || res.failed > 0)) {
-                                helpers.showError(res.error || (res.errors && res.errors.length ? res.errors.join('\n') : 'Failed to adjust timing.'));
-                                return Promise.reject(res.error || 'apply failed');
+                            if (res && res.failed > 0) {
+                                helpers.showError(res.errors && res.errors.length ? res.errors.join('\n') : 'Some markers failed to update.');
+                                return;
                             }
                             refreshRow(row, ep);
                             helpers.showOffsetSnackbar('Timing adjusted.', function () {
-                                return helpers.applyBulkSet([undoItem]).then(function () {
-                                    if (seasonIdForRefresh && seasonContainer) {
-                                        refreshSeasonEpisodes(seasonIdForRefresh, seasonContainer);
-                                    } else {
-                                        refreshRow(row, ep);
-                                    }
-                                });
+                                return helpers.applyBulkSet([undoItem])
+                                    .then(function () {
+                                        if (seasonIdForRefresh && seasonContainer) {
+                                            refreshSeasonEpisodes(seasonIdForRefresh, seasonContainer);
+                                        } else {
+                                            refreshRow(row, ep);
+                                        }
+                                    })
+                                    .catch(function (err) {
+                                        helpers.showError('Undo failed: ' + (err && err.message ? err.message : 'unknown error'));
+                                    });
                             });
                         })
                         .catch(function (err) {
                             helpers.hideLoading();
-                            helpers.showError('Failed to adjust timing.');
+                            helpers.showError(err && err.message ? err.message : 'Failed to adjust timing.');
                             return Promise.reject(err);
                         });
                 }
@@ -1072,9 +1076,10 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
         }
 
         function adjustSeasonOffset(seasonId, episodes, container) {
-            var targets = getTargetEpisodes(seasonId, episodes);
+            var selected = selectedItems[seasonId] || {};
+            var targets = episodes.filter(function (ep) { return selected[ep.ItemId]; });
             if (targets.length === 0) {
-                helpers.showError('No episodes to adjust.');
+                helpers.showError('Select one or more episodes to adjust.');
                 return;
             }
             if (targets.length > 500) {
@@ -1130,9 +1135,13 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                             }
                             refreshSeasonEpisodes(seasonId, container);
                             helpers.showOffsetSnackbar(msg + '.', function () {
-                                return helpers.applyBulkSet(undo).then(function () {
-                                    refreshSeasonEpisodes(seasonId, container);
-                                });
+                                return helpers.applyBulkSet(undo)
+                                    .then(function () {
+                                        refreshSeasonEpisodes(seasonId, container);
+                                    })
+                                    .catch(function (err) {
+                                        helpers.showError('Undo failed: ' + (err && err.message ? err.message : 'unknown error'));
+                                    });
                             });
                         })
                         .catch(function (err) {

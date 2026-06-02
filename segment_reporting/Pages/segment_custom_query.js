@@ -1983,7 +1983,7 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                 btnAdjust.disabled = count === 0;
                 if (count === 0) btnAdjust.style.opacity = '0.5';
                 btnAdjust.addEventListener('click', function () {
-                    adjustBulkOffset();
+                    helpers.guardButton(btnAdjust, adjustBulkOffset);
                 });
                 btnContainer.appendChild(btnAdjust);
             }
@@ -2076,18 +2076,22 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                     return helpers.applyBulkSet([changed])
                         .then(function (res) {
                             helpers.hideLoading();
-                            if (res && (res.error || res.failed > 0)) {
-                                helpers.showError(res.error || (res.errors && res.errors.length ? res.errors.join('\n') : 'Failed to adjust timing.'));
-                                return Promise.reject(res.error || 'apply failed');
+                            if (res && res.failed > 0) {
+                                helpers.showError(res.errors && res.errors.length ? res.errors.join('\n') : 'Some markers failed to update.');
+                                return;
                             }
                             executeQuery();
                             helpers.showOffsetSnackbar('Timing adjusted.', function () {
-                                return helpers.applyBulkSet([undoItem]).then(function () { executeQuery(); });
+                                return helpers.applyBulkSet([undoItem])
+                                    .then(function () { executeQuery(); })
+                                    .catch(function (err) {
+                                        helpers.showError('Undo failed: ' + (err && err.message ? err.message : 'unknown error'));
+                                    });
                             });
                         })
                         .catch(function (err) {
                             helpers.hideLoading();
-                            helpers.showError('Failed to adjust timing.');
+                            helpers.showError(err && err.message ? err.message : 'Failed to adjust timing.');
                             return Promise.reject(err);
                         });
                 }
@@ -2171,7 +2175,11 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                             }
                             executeQuery();
                             helpers.showOffsetSnackbar(msg + '.', function () {
-                                return helpers.applyBulkSet(undo).then(function () { executeQuery(); });
+                                return helpers.applyBulkSet(undo)
+                                    .then(function () { executeQuery(); })
+                                    .catch(function (err) {
+                                        helpers.showError('Undo failed: ' + (err && err.message ? err.message : 'unknown error'));
+                                    });
                             });
                         })
                         .catch(function (err) {

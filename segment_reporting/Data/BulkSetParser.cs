@@ -27,6 +27,13 @@ namespace segment_reporting.Data
             {
                 return Err("itemIds is required");
             }
+            for (int i = 0; i < itemIds.Count; i++)
+            {
+                if (itemIds[i].Length == 0)
+                {
+                    return Err("itemIds contains an empty entry");
+                }
+            }
             if (itemIds.Count > maxItems)
             {
                 return Err("Maximum " + maxItems + " items per batch");
@@ -74,11 +81,7 @@ namespace segment_reporting.Data
             }
             foreach (var part in input.Split(','))
             {
-                var trimmed = part.Trim();
-                if (trimmed.Length > 0)
-                {
-                    result.Add(trimmed);
-                }
+                result.Add(part.Trim());
             }
             return result;
         }

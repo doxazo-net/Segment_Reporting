@@ -752,65 +752,124 @@ namespace segment_reporting.Api
 
         private object ExecuteBulkValueSet(List<BulkSetItem> items)
         {
-            SegmentRepository repo = GetRepository();
-
             int succeeded = 0;
             int failed = 0;
             var errors = new List<string>();
 
             foreach (var item in items)
             {
-                ApplyOutcome introStart = TryApplyMarker(repo, item.ItemId, MarkerTypes.IntroStart, item.IntroStartTicks);
-                ApplyOutcome introEnd = TryApplyMarker(repo, item.ItemId, MarkerTypes.IntroEnd, item.IntroEndTicks);
-                ApplyOutcome creditsStart = TryApplyMarker(repo, item.ItemId, MarkerTypes.CreditsStart, item.CreditsStartTicks);
-
-                foreach (var outcome in new[] { introStart, introEnd, creditsStart })
+                int markerCount = (item.IntroStartTicks.HasValue ? 1 : 0)
+                    + (item.IntroEndTicks.HasValue ? 1 : 0)
+                    + (item.CreditsStartTicks.HasValue ? 1 : 0);
+                if (markerCount == 0)
                 {
-                    if (!outcome.Touched)
-                    {
-                        continue;
-                    }
+                    continue;
+                }
 
-                    if (outcome.Error == null)
-                    {
-                        succeeded++;
-                    }
-                    else
-                    {
-                        failed++;
-                        errors.Add(outcome.Error);
-                    }
+                try
+                {
+                    WriteItemSegments(item);
+                    succeeded += markerCount;
+                }
+                catch (Exception ex)
+                {
+                    failed += markerCount;
+                    errors.Add(item.ItemId + ": " + ex.Message);
+                    _logger.Warn("BulkSetSegments: Failed for item {0}: {1}", item.ItemId, ex.Message);
                 }
             }
 
             return new { succeeded, failed, errors };
         }
 
-        private ApplyOutcome TryApplyMarker(SegmentRepository repo, string itemId, string markerType, long? ticks)
+        // Writes all provided markers for one item to Emby in a single SaveChapters
+        // call (so a partial failure cannot leave Emby half-updated), validating
+        // cross-marker ordering against the combined (new + existing) values first,
+        // then updates the SQLite cache.
+        private void WriteItemSegments(BulkSetItem item)
         {
-            if (!ticks.HasValue)
+            long internalId = long.Parse(item.ItemId);
+            var embyItem = _libraryManager.GetItemById(internalId);
+            if (embyItem == null)
             {
-                return default(ApplyOutcome);
+                throw new ArgumentException("Item not found: " + internalId);
             }
 
-            try
+            var chapters = _itemRepository.GetChapters(embyItem);
+            var chapterList = chapters != null
+                ? new List<ChapterInfo>(chapters)
+                : new List<ChapterInfo>();
+
+            if (item.IntroStartTicks.HasValue)
             {
-                long internalId = long.Parse(itemId);
-                WriteSegmentToEmby(internalId, markerType, ticks.Value);
-                repo.UpdateSegmentTicks(itemId, markerType, ticks.Value);
-                return new ApplyOutcome { Touched = true };
+                UpsertChapter(chapterList, MarkerType.IntroStart, item.IntroStartTicks.Value);
             }
-            catch (Exception ex)
+            if (item.IntroEndTicks.HasValue)
             {
-                _logger.Warn("BulkSetSegments: Failed for item {0} marker {1}: {2}", itemId, markerType, ex.Message);
-                return new ApplyOutcome { Touched = true, Error = itemId + "/" + markerType + ": " + ex.Message };
+                UpsertChapter(chapterList, MarkerType.IntroEnd, item.IntroEndTicks.Value);
+            }
+            if (item.CreditsStartTicks.HasValue)
+            {
+                UpsertChapter(chapterList, MarkerType.CreditsStart, item.CreditsStartTicks.Value);
+            }
+
+            ValidateMarkerOrder(chapterList, item);
+
+            _itemRepository.SaveChapters(embyItem.InternalId, chapterList);
+
+            SegmentRepository repo = GetRepository();
+            if (item.IntroStartTicks.HasValue)
+            {
+                repo.UpdateSegmentTicks(item.ItemId, MarkerTypes.IntroStart, item.IntroStartTicks.Value);
+            }
+            if (item.IntroEndTicks.HasValue)
+            {
+                repo.UpdateSegmentTicks(item.ItemId, MarkerTypes.IntroEnd, item.IntroEndTicks.Value);
+            }
+            if (item.CreditsStartTicks.HasValue)
+            {
+                repo.UpdateSegmentTicks(item.ItemId, MarkerTypes.CreditsStart, item.CreditsStartTicks.Value);
             }
         }
 
-        private struct ApplyOutcome
+        private static void UpsertChapter(List<ChapterInfo> chapterList, MarkerType markerType, long ticks)
         {
-            public bool Touched;
-            public string Error;
+            int existing = chapterList.FindIndex(c => c.MarkerType == markerType);
+            if (existing >= 0)
+            {
+                chapterList[existing].StartPositionTicks = ticks;
+            }
+            else
+            {
+                chapterList.Add(new ChapterInfo { StartPositionTicks = ticks, MarkerType = markerType });
+            }
+        }
+
+        // Enforces IntroStart <= IntroEnd <= CreditsStart, but only for a pair whose
+        // markers this request actually touches (so a pre-existing inversion does not
+        // block an unrelated edit).
+        private static void ValidateMarkerOrder(List<ChapterInfo> chapterList, BulkSetItem item)
+        {
+            long? introStart = FindMarkerTicks(chapterList, MarkerType.IntroStart);
+            long? introEnd = FindMarkerTicks(chapterList, MarkerType.IntroEnd);
+            long? creditsStart = FindMarkerTicks(chapterList, MarkerType.CreditsStart);
+
+            if ((item.IntroStartTicks.HasValue || item.IntroEndTicks.HasValue)
+                && introStart.HasValue && introEnd.HasValue && introEnd.Value < introStart.Value)
+            {
+                throw new ArgumentException("IntroEnd must be greater than or equal to IntroStart");
+            }
+            if ((item.IntroEndTicks.HasValue || item.CreditsStartTicks.HasValue)
+                && introEnd.HasValue && creditsStart.HasValue && creditsStart.Value < introEnd.Value)
+            {
+                throw new ArgumentException("CreditsStart must be greater than or equal to IntroEnd");
+            }
+        }
+
+        private static long? FindMarkerTicks(List<ChapterInfo> chapterList, MarkerType markerType)
+        {
+            int idx = chapterList.FindIndex(c => c.MarkerType == markerType);
+            return idx >= 0 ? chapterList[idx].StartPositionTicks : (long?)null;
         }
 
         public object Post(SyncNow request)

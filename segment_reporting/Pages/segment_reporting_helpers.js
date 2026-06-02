@@ -1167,7 +1167,13 @@ function segmentReportingBuildBulkSetBody(items) {
 
 function segmentReportingApplyBulkSet(items) {
     var body = segmentReportingBuildBulkSetBody(items);
-    return segmentReportingApiCall('bulk_set_segments', 'POST', JSON.stringify(body));
+    return segmentReportingApiCall('bulk_set_segments', 'POST', JSON.stringify(body))
+        .then(function (res) {
+            if (res && res.error) {
+                return Promise.reject(new Error(res.error));
+            }
+            return res;
+        });
 }
 
 // config:
@@ -1181,6 +1187,9 @@ function segmentReportingApplyBulkSet(items) {
 //              bulk result:       { introDelta, introEndDelta, creditsDelta } in ticks
 //   onClose  - optional function() called after the modal is dismissed
 function segmentReportingCreateOffsetModal(config) {
+    if (document.querySelector('.segment-offset-overlay')) {
+        return null;
+    }
     var STEP = SEGMENT_REPORTING_OFFSET_STEP_TICKS;
     var isBulk = config.mode === 'bulk';
 
@@ -1230,7 +1239,7 @@ function segmentReportingCreateOffsetModal(config) {
             leftDisabled: function () { return false; },
             display: function () { return fmtDelta(state.creditsDelta); } });
     } else {
-        var hasIntro = state.introStart != null || state.introEnd != null;
+        var hasIntro = state.introStart != null && state.introEnd != null;
         rows.push({ label: 'Intro', hint: 'moves whole intro, keeps length', enabled: hasIntro,
             step: function (d) {
                 var delta = d * STEP;

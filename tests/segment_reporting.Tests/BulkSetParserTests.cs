@@ -68,5 +68,34 @@ namespace segment_reporting.Tests
             var result = BulkSetParser.Parse("1", "abc", null, null, 500);
             Assert.Contains("Invalid", result.Error);
         }
+
+        [Fact]
+        public void Parse_EmptyItemIdToken_ReturnsError()
+        {
+            var result = BulkSetParser.Parse("1,,3", "100,200,300", null, null, 500);
+            Assert.NotNull(result.Error);
+            Assert.Null(result.Items);
+        }
+
+        [Fact]
+        public void Parse_TrailingEmptyItemIdToken_ReturnsError()
+        {
+            var result = BulkSetParser.Parse("1,3,", null, null, null, 500);
+            Assert.NotNull(result.Error);
+        }
+
+        [Fact]
+        public void Parse_AllTickColumnsEmpty_ReturnsItemsWithNullTicks()
+        {
+            var result = BulkSetParser.Parse("1,2,3", null, null, null, 500);
+            Assert.Null(result.Error);
+            Assert.Equal(3, result.Items.Count);
+            foreach (var it in result.Items)
+            {
+                Assert.Null(it.IntroStartTicks);
+                Assert.Null(it.IntroEndTicks);
+                Assert.Null(it.CreditsStartTicks);
+            }
+        }
     }
 }
