@@ -83,6 +83,16 @@ dotnet build --configuration Release
 
 The compiled DLL will be in `bin/Release/`.
 
+### Testing
+
+A `Makefile` wraps the common workflows (run `make help` for the list):
+
+- `make test` - xUnit unit suite for pure logic (custom-query validators, marker types).
+- `make gate` - the full CI-parity pre-push gate (Release build with analyzers as errors, unit tests, format check, JS lint); also run by the git pre-push hook.
+- `make uat-deploy` / `uat-seed` / `uat-test` / `uat-concurrency` / `uat` - the UAT Emby harness, which exercises the full write path and the lock-ordering concurrency guard against a real Emby server (Docker/OrbStack). These are local-only manual gates; they need a running UAT Emby and a gitignored `.env`, and never run in CI.
+
+See the [Developer Guide](docs/DEVELOPER.md) for the full testing and UAT workflow.
+
 ### Dependencies
 
 - `mediabrowser.server.core` (4.9.*) - Emby server SDK

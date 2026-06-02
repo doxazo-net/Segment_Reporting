@@ -5,7 +5,8 @@
 # push that would fail CI is caught locally first.
 #
 # CI runs, in order: minify JS, restore deps, `dotnet build <sln> -c Release
-# -warnaserror`, `dotnet format --verify-no-changes`, `npm run lint:js`. A
+# -warnaserror`, `dotnet test <sln> -c Release --no-build`,
+# `dotnet format --verify-no-changes`, `npm run lint:js`. A
 # Release build already minifies the JS (MinifyJS target, BeforeTargets
 # CoreCompile) and restores the originals (RestoreJS target, AfterTargets
 # Build) on its own, so we do not minify separately. The catch: RestoreJS only
@@ -41,6 +42,13 @@ echo "=== Release build (-warnaserror, mirrors CI) ==="
 # analyzers as errors, then restores the JS. This is the single most important
 # CI parity check: a clean pre-commit can still break this.
 dotnet build "$SLN" --configuration Release -warnaserror
+
+echo ""
+echo "=== Unit tests (xUnit, --no-build reuses the Release build above) ==="
+# The fast pure-logic suite (custom-query validators, marker types). Runs in
+# CI's build job too; running it here catches a test regression before the push.
+# It needs no Emby server. The UAT/fuzz gates are local-only and NOT run here.
+dotnet test "$SLN" --configuration Release --no-build
 
 echo ""
 echo "=== Code formatting (dotnet format --verify-no-changes) ==="
