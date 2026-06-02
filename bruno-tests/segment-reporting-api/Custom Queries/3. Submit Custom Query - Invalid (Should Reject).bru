@@ -14,6 +14,18 @@ headers {
   X-Emby-Token: {{apiKey}}
 }
 
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("non-SELECT query is rejected", function() {
+    const b = res.getBody();
+    const msg = (b && (b.Message || b.message)) || "";
+    expect(msg.toLowerCase()).to.contain("allowed");
+  });
+}
+
 docs {
   ## Submit Custom Query - Security Test
 
