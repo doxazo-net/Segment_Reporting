@@ -88,10 +88,10 @@ can always run the underlying command shown below by hand.
 | `make clean` | `dotnet clean` + remove `bin`/`obj`/`site` | Remove build output and the generated docs site. |
 
 The UAT Emby harness ships as `make uat-deploy` / `uat-seed` / `uat-test`
-(alias `bruno`) / `uat-clean` / `uat`, driving `scripts/uat/*`. Fuzzing and
-leak detection (`make fuzz` / `leak-check`) remain Phase 3 and ship with that
-work. See [UAT Emby Harness](#uat-emby-harness) below before running any of
-the `uat-*` targets.
+(alias `bruno`) / `uat-concurrency` / `uat-clean` / `uat`, driving
+`scripts/uat/*`. Fuzzing and leak detection (`make fuzz` / `leak-check`) remain
+Phase 3 and ship with that work. See [UAT Emby Harness](#uat-emby-harness) below
+before running any of the `uat-*` targets.
 
 ### Building the Plugin
 
@@ -167,6 +167,7 @@ seed media -> Emby ingest -> plugin sync -> set markers -> read reports -> asser
 | `make uat-deploy` | Build the Release DLL, `docker cp` it into the container's `/config/plugins`, restart Emby, wait until healthy. |
 | `make uat-seed` | Generate sparse media + lockdata NFOs, `docker cp` into `/uat-media`, create the `SR-UAT-TV` / `SR-UAT-Movies` libraries via the VirtualFolders API, scan, `sync_now`, write a varied marker coverage matrix, and capture the discovered IDs into `bruno-tests/.../environments/Local.bru`. Idempotent. |
 | `make uat-test` (alias `make bruno`) | Run the Bruno collection assertions against UAT (reads `apiKey` from `.env`). |
+| `make uat-concurrency` | Stress `SegmentRepository` lock ordering (#66) with concurrent API workers (mixed reads plus an idempotent `/uat-media` write); fails on any request error/timeout or rowCount drift. Needs `make uat-seed` first. Tunable via `WORKERS` / `ITERATIONS` (defaults 8 / 25). Not run in CI. |
 | `make uat-clean` | Delete the `SR-UAT` libraries, remove `/uat-media` in the container, and reset the captured IDs in `Local.bru` to placeholders. |
 | `make uat` | Convenience chain: `uat-deploy` -> `uat-seed` -> `uat-test`. |
 
@@ -2290,8 +2291,26 @@ The project targets `net8.0` to match the CI SDK; `<RollForward>Major</RollForwa
 lets the test host run on a newer locally-installed runtime when 8.0 is absent.
 CI runs them as a dedicated step in the build job (see the CI/CD Pipeline section).
 
-Future work (issue #106) adds repository/migration tests, SharpFuzz fuzz targets
-for the query parser, the Threading.Analyzers, and a Dockerized UAT Emby harness.
+The plugin analyzer set also includes `Microsoft.VisualStudio.Threading.Analyzers`
+(threading-antipattern static checks), enforced by the `-warnaserror` Release
+build in CI and the local pre-push gate.
+
+Remaining issue #106 work: SharpFuzz fuzz targets for the query validators (run
+in Docker, local-only).
+
+### Concurrency Stress (UAT, manual)
+
+The plugin's SQLite stack (`SQLitePCL.pretty` plus the raw provider Emby bundles)
+cannot be hosted outside the Emby runtime, so `SegmentRepository`'s lock ordering
+(#66) is exercised against a running UAT server rather than in a standalone unit
+test. `make uat-concurrency` (or `bash scripts/uat/concurrency.sh`) fires many
+concurrent API workers that mix reads (library summary, cache stats, sync status,
+custom query, series list, season list) with an idempotent write (`update_segment` on a seeded
+`/uat-media` episode). It fails if any request errors or times out (a possible
+deadlock) or if the row count drifts (the writes are idempotent, so drift implies
+a lost update or corruption). Local manual gate only: it needs the UAT Emby up and
+seeded (`make uat-seed`) and never runs in CI or a git hook. Tune with the
+`WORKERS` and `ITERATIONS` environment variables (defaults 8 and 25).
 
 ### Manual Testing Workflow
 

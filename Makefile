@@ -15,7 +15,7 @@ NPM_PREFIX := segment_reporting
 
 .PHONY: help restore build build-release test format format-check lint gate \
         hooks hooks-install docs docs-deps docs-serve screenshots clean \
-        uat-deploy uat-seed uat-test bruno uat-clean uat
+        uat-deploy uat-seed uat-test bruno uat-clean uat uat-concurrency
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -79,6 +79,9 @@ uat-test: ## UAT: run the Bruno API assertions against UAT (reads apiKey from .e
 		--env-var "apiKey=$$(grep -E '^EMBY_UAT_API_KEY=' ../../.env | head -1 | cut -d= -f2- | tr -d '\r\"')"
 
 bruno: uat-test ## UAT: alias for uat-test
+
+uat-concurrency: ## UAT: stress SegmentRepository lock ordering (#66) with concurrent API requests
+	bash scripts/uat/concurrency.sh
 
 uat-clean: ## UAT: remove synthetic libraries/media, reset Local.bru IDs
 	bash scripts/uat/clean.sh
