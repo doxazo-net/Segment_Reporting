@@ -14,6 +14,22 @@ headers {
   X-Emby-Token: {{apiKey}}
 }
 
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("item_segments reflects Has flags + tick fields", function() {
+    const b = res.getBody();
+    expect(b).to.have.property("ItemId");
+    expect(b).to.have.property("ItemType");
+    expect(b).to.have.property("HasIntro");
+    expect(b).to.have.property("HasCredits");
+    expect(b).to.have.property("IntroStartTicks");
+    expect(b).to.have.property("CreditsStartTicks");
+  });
+}
+
 docs {
   ## Get Item Segments
 

@@ -14,6 +14,16 @@ headers {
   X-Emby-Token: {{apiKey}}
 }
 
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("sync_status exposes itemsScanned", function() {
+    expect(res.getBody()).to.have.property("itemsScanned");
+  });
+}
+
 docs {
   ## Get Sync Status
 

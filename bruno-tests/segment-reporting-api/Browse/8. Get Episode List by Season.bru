@@ -14,6 +14,21 @@ headers {
   X-Emby-Token: {{apiKey}}
 }
 
+assert {
+  res.status: eq 200
+}
+
+tests {
+  test("episode_list rows carry tick fields", function() {
+    const rows = res.getBody();
+    expect(Array.isArray(rows)).to.be.true;
+    if (rows.length > 0) {
+      expect(rows[0]).to.have.property("IntroStartTicks");
+      expect(rows[0]).to.have.property("CreditsStartTicks");
+    }
+  });
+}
+
 docs {
   ## Get Episode List by Season
 
