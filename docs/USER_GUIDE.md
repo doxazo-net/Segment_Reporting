@@ -205,6 +205,9 @@ segment timestamps displayed directly. Each movie row has an **Actions**
 dropdown with the following operations:
 
 - **Edit** - opens inline editing for the movie's timestamps
+- **Adjust timing** - opens the timing adjustment modal (see
+  [Adjusting Timing](#adjusting-timing-per-row)) to nudge the movie's markers in
+  250 ms steps
 - **Delete** - submenu with **Intros**, **Credits**, or **Both** to remove
   markers. Greyed out when the movie has no markers of that type.
 - **Set Credits to End** - places the Credits Start marker at the movie's
@@ -256,7 +259,7 @@ Inside each season accordion is a table listing every episode with columns for:
 | **Intro Start** | Timestamp where the intro begins |
 | **Intro End** | Timestamp where the intro ends |
 | **Credits Start** | Timestamp where the credits begin |
-| **Actions** | An **Actions** dropdown menu for editing, deleting, copying, and more |
+| **Actions** | An **Actions** dropdown menu for editing, adjusting timing, deleting, copying, and more |
 
 Timestamp values appear as clickable links (see Playback Links below). A dash
 (`--:--:--.---`) means no marker is set.
@@ -350,6 +353,35 @@ scanning these items for credits that do not exist.
 > **Tip:** To apply this across many episodes at once, use the season-level
 > **Actions** dropdown - see [Season-Level Actions Dropdown](#season-level-actions-dropdown).
 
+### Adjusting Timing (Per Row)
+
+The **Adjust timing** option in the Actions menu lets you nudge an item's
+markers earlier or later in 250 ms steps without opening the full inline editor.
+
+1. Click the **Actions** button on the episode or movie row.
+2. Select **Adjust timing**.
+3. A modal appears with up to three rows:
+   - **Intro** - moves IntroStart and IntroEnd together, preserving the intro
+     length. Use this when the intro starts too early or too late.
+   - **Intro end** - moves only IntroEnd, leaving IntroStart unchanged. Use
+     this to trim or extend the intro's end point.
+   - **Credits** - moves CreditsStart earlier or later.
+4. For each row, click the left arrow to move that marker **earlier** or the
+   right arrow to move it **later** (each click = 250 ms).
+5. Click **Apply** to save the change.
+
+A brief **Undo** prompt appears after applying. Click it immediately to restore
+the previous values if the adjustment was wrong.
+
+**Notes:**
+
+- Markers that do not exist on the item are shown disabled and cannot be
+  adjusted.
+- The left (earlier) arrow is disabled when the marker is already at 0 to
+  prevent negative timestamps.
+- This is available on the Series Detail page (episode rows), the Library page
+  (movie rows), and the Custom Query results table.
+
 ---
 
 ## Bulk Operations
@@ -429,6 +461,31 @@ Detection runs in the background. After it completes, run a sync (or wait for
 the nightly sync) to see the newly detected markers in Segment Reporting.
 
 > **Tip:** A detect button also appears at the series level in the page header.
+
+### Adjusting Timing in Bulk
+
+You can apply the same timing shift to all selected items at once using the
+**Adjust timing** option in the season-level or query-page bulk action bar.
+
+1. Select the target episodes using checkboxes (or leave all unchecked to
+   target the entire season on the Series Detail page).
+2. Click **Adjust timing** in the bulk action bar.
+3. Choose the shift direction and amount (250 ms per step) for each marker
+   type in the modal - the same three rows as the per-row modal (Intro, Intro
+   end, Credits).
+4. Review the confirmation prompt showing how many items will be updated (up
+   to 500 items per operation).
+5. Click **Apply** to commit the shift to all selected items.
+
+A brief **Undo** prompt appears after the bulk apply. Click it to restore every
+item's previous values.
+
+The relative shift is applied to each item independently using that item's
+current marker values. Items where a particular marker is absent are skipped for
+that marker type.
+
+Bulk timing adjustment is available on the Series Detail page (season bulk bar),
+the Library page (movies), and the Custom Query results page (results bulk bar).
 
 ---
 
@@ -516,8 +573,8 @@ supports:
 
 - **Row checkboxes** - select rows for bulk operations
 - **Per-row Actions menu** - when the query includes an `ItemId` column, each
-  row shows an **Actions** button with options for Edit, Delete (with Intros /
-  Credits / Both submenu), Set Credits to End, and Detect Credits
+  row shows an **Actions** button with options for Edit, Adjust timing, Delete
+  (with Intros / Credits / Both submenu), Set Credits to End, and Detect Credits
 - **Inline editing** - if the results include segment timestamp columns, you
   can edit values directly in the results table
 - **Bulk actions** - delete or set credits to end for selected rows

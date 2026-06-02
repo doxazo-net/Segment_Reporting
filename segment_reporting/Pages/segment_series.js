@@ -545,6 +545,12 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                 startEdit(row, ep);
             }));
 
+            menu.appendChild(helpers.createMenuItem('Adjust timing', true, colors, function (e) {
+                e.stopPropagation();
+                menu.remove();
+                adjustEpisodeOffset(row, ep);
+            }));
+
             menu.appendChild(helpers.createMenuDivider(colors));
 
             // ── Copy submenu ──
@@ -818,6 +824,15 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
 
             rightSide.appendChild(btnApply);
 
+            var btnAdjust = document.createElement('button');
+            btnAdjust.className = 'raised emby-button btn-bulk-adjust';
+            btnAdjust.style.cssText = 'padding: 0.3em 0.8em; font-size: 0.85em;';
+            btnAdjust.textContent = 'Adjust timing';
+            btnAdjust.addEventListener('click', function () {
+                adjustSeasonOffset(seasonId, episodes, container);
+            });
+            rightSide.appendChild(btnAdjust);
+
             row.appendChild(leftSide);
             row.appendChild(rightSide);
 
@@ -993,6 +1008,133 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                 helpers.hideLoading();
                 console.error('Bulk apply failed:', error);
                 helpers.showError('Bulk apply failed: ' + (error.message || 'Unknown error'));
+            });
+        }
+
+        function adjustEpisodeOffset(row, ep) {
+            var seasonContainer = row.closest('[data-season-id]');
+            var seasonIdForRefresh = seasonContainer ? seasonContainer.getAttribute('data-season-id') : null;
+            var orig = {
+                ItemId: ep.ItemId,
+                introStart: ep.IntroStartTicks != null ? ep.IntroStartTicks : null,
+                introEnd: ep.IntroEndTicks != null ? ep.IntroEndTicks : null,
+                credits: ep.CreditsStartTicks != null ? ep.CreditsStartTicks : null
+            };
+
+            helpers.createOffsetModal({
+                title: 'Adjust timing - ' + (ep.ItemName || 'Episode'),
+                mode: 'individual',
+                isLight: helpers.isLightTheme(view),
+                current: { introStart: orig.introStart, introEnd: orig.introEnd, credits: orig.credits },
+                onApply: function (result) {
+                    var changed = {
+                        ItemId: ep.ItemId,
+                        introStart: (result.introStart != null && result.introStart !== orig.introStart) ? result.introStart : null,
+                        introEnd: (result.introEnd != null && result.introEnd !== orig.introEnd) ? result.introEnd : null,
+                        credits: (result.credits != null && result.credits !== orig.credits) ? result.credits : null
+                    };
+                    if (changed.introStart == null && changed.introEnd == null && changed.credits == null) {
+                        return; // nothing changed; modal closes
+                    }
+                    var undoItem = {
+                        ItemId: ep.ItemId,
+                        introStart: changed.introStart != null ? orig.introStart : null,
+                        introEnd: changed.introEnd != null ? orig.introEnd : null,
+                        credits: changed.credits != null ? orig.credits : null
+                    };
+
+                    helpers.showLoading();
+                    return helpers.applyBulkSet([changed])
+                        .then(function (res) {
+                            helpers.hideLoading();
+                            if (res && res.error) { helpers.showError(res.error); return Promise.reject(res.error); }
+                            refreshRow(row, ep);
+                            helpers.showOffsetSnackbar('Timing adjusted.', function () {
+                                return helpers.applyBulkSet([undoItem]).then(function () {
+                                    if (seasonIdForRefresh && seasonContainer) {
+                                        refreshSeasonEpisodes(seasonIdForRefresh, seasonContainer);
+                                    } else {
+                                        refreshRow(row, ep);
+                                    }
+                                });
+                            });
+                        })
+                        .catch(function (err) {
+                            helpers.hideLoading();
+                            helpers.showError('Failed to adjust timing.');
+                            return Promise.reject(err);
+                        });
+                }
+            });
+        }
+
+        function adjustSeasonOffset(seasonId, episodes, container) {
+            var targets = getTargetEpisodes(seasonId, episodes);
+            if (targets.length === 0) {
+                helpers.showError('No episodes to adjust.');
+                return;
+            }
+            if (targets.length > 500) {
+                helpers.showError('Select 500 or fewer episodes per batch.');
+                return;
+            }
+
+            helpers.createOffsetModal({
+                title: 'Adjust timing - ' + targets.length + ' episode(s)',
+                mode: 'bulk',
+                isLight: helpers.isLightTheme(view),
+                onApply: function (deltas) {
+                    var changed = [];
+                    var undo = [];
+                    var endTotal = deltas.introDelta + deltas.introEndDelta;
+                    targets.forEach(function (t) {
+                        var ci = { ItemId: t.ItemId, introStart: null, introEnd: null, credits: null };
+                        var ui = { ItemId: t.ItemId, introStart: null, introEnd: null, credits: null };
+                        if (deltas.introDelta !== 0 && t.IntroStartTicks != null) {
+                            ci.introStart = Math.max(0, t.IntroStartTicks + deltas.introDelta);
+                            ui.introStart = t.IntroStartTicks;
+                        }
+                        if (endTotal !== 0 && t.IntroEndTicks != null) {
+                            ci.introEnd = Math.max(0, t.IntroEndTicks + endTotal);
+                            ui.introEnd = t.IntroEndTicks;
+                        }
+                        if (deltas.creditsDelta !== 0 && t.CreditsStartTicks != null) {
+                            ci.credits = Math.max(0, t.CreditsStartTicks + deltas.creditsDelta);
+                            ui.credits = t.CreditsStartTicks;
+                        }
+                        if (ci.introStart != null || ci.introEnd != null || ci.credits != null) {
+                            changed.push(ci);
+                            undo.push(ui);
+                        }
+                    });
+
+                    if (changed.length === 0) { return; }
+
+                    var summary = 'Shift timing on ' + changed.length + ' episode(s)?';
+                    if (!confirm(summary)) { return Promise.reject('cancelled'); }
+
+                    helpers.showLoading();
+                    return helpers.applyBulkSet(changed)
+                        .then(function (res) {
+                            helpers.hideLoading();
+                            var msg = 'Adjusted ' + res.succeeded + ' marker(s)';
+                            if (res.failed > 0) {
+                                msg += ', ' + res.failed + ' failed';
+                                helpers.showError(msg + (res.errors && res.errors.length ? '\n\n' + res.errors.join('\n') : ''));
+                            }
+                            refreshSeasonEpisodes(seasonId, container);
+                            helpers.showOffsetSnackbar(msg + '.', function () {
+                                return helpers.applyBulkSet(undo).then(function () {
+                                    refreshSeasonEpisodes(seasonId, container);
+                                });
+                            });
+                        })
+                        .catch(function (err) {
+                            helpers.hideLoading();
+                            helpers.showError('Failed to adjust timing.');
+                            return Promise.reject(err);
+                        });
+                }
             });
         }
 

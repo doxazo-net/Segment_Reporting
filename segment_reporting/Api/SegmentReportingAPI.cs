@@ -149,6 +149,24 @@ namespace segment_reporting.Api
         public long OffsetTicks { get; set; }
     }
 
+    // http(s)://<host>:<port>/emby/segment_reporting/bulk_set_segments
+    [Route("/segment_reporting/bulk_set_segments", "POST", Summary = "Sets absolute marker ticks per item (offset apply and undo)")]
+    [Authenticated(Roles = "admin")]
+    public class BulkSetSegments : IReturn<object>
+    {
+        [ApiMember(Name = "ItemIds", Description = "Comma-separated item IDs", IsRequired = true, DataType = "string", ParameterType = "query", Verb = "POST")]
+        public string ItemIds { get; set; }
+
+        [ApiMember(Name = "IntroStartTicks", Description = "Comma-separated IntroStart ticks aligned to ItemIds; empty token leaves it untouched", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "POST")]
+        public string IntroStartTicks { get; set; }
+
+        [ApiMember(Name = "IntroEndTicks", Description = "Comma-separated IntroEnd ticks aligned to ItemIds; empty token leaves it untouched", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "POST")]
+        public string IntroEndTicks { get; set; }
+
+        [ApiMember(Name = "CreditsStartTicks", Description = "Comma-separated CreditsStart ticks aligned to ItemIds; empty token leaves it untouched", IsRequired = false, DataType = "string", ParameterType = "query", Verb = "POST")]
+        public string CreditsStartTicks { get; set; }
+    }
+
     // http(s)://<host>:<port>/emby/segment_reporting/sync_now
     [Route("/segment_reporting/sync_now", "POST", Summary = "Trigger immediate full sync")]
     [Authenticated(Roles = "admin")]
@@ -711,6 +729,88 @@ namespace segment_reporting.Api
                     return true;
                 },
                 "BulkSetCreditsEnd");
+        }
+
+        public object Post(BulkSetSegments request)
+        {
+            _logger.Info("BulkSetSegments: itemIds={0}", request.ItemIds);
+
+            var parsed = BulkSetParser.Parse(
+                request.ItemIds,
+                request.IntroStartTicks,
+                request.IntroEndTicks,
+                request.CreditsStartTicks,
+                MaxBulkItems);
+
+            if (parsed.Error != null)
+            {
+                return new { error = parsed.Error };
+            }
+
+            return ExecuteBulkValueSet(parsed.Items);
+        }
+
+        private object ExecuteBulkValueSet(List<BulkSetItem> items)
+        {
+            SegmentRepository repo = GetRepository();
+
+            int succeeded = 0;
+            int failed = 0;
+            var errors = new List<string>();
+
+            foreach (var item in items)
+            {
+                ApplyOutcome introStart = TryApplyMarker(repo, item.ItemId, MarkerTypes.IntroStart, item.IntroStartTicks);
+                ApplyOutcome introEnd = TryApplyMarker(repo, item.ItemId, MarkerTypes.IntroEnd, item.IntroEndTicks);
+                ApplyOutcome creditsStart = TryApplyMarker(repo, item.ItemId, MarkerTypes.CreditsStart, item.CreditsStartTicks);
+
+                foreach (var outcome in new[] { introStart, introEnd, creditsStart })
+                {
+                    if (!outcome.Touched)
+                    {
+                        continue;
+                    }
+
+                    if (outcome.Error == null)
+                    {
+                        succeeded++;
+                    }
+                    else
+                    {
+                        failed++;
+                        errors.Add(outcome.Error);
+                    }
+                }
+            }
+
+            return new { succeeded, failed, errors };
+        }
+
+        private ApplyOutcome TryApplyMarker(SegmentRepository repo, string itemId, string markerType, long? ticks)
+        {
+            if (!ticks.HasValue)
+            {
+                return default(ApplyOutcome);
+            }
+
+            try
+            {
+                long internalId = long.Parse(itemId);
+                WriteSegmentToEmby(internalId, markerType, ticks.Value);
+                repo.UpdateSegmentTicks(itemId, markerType, ticks.Value);
+                return new ApplyOutcome { Touched = true };
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn("BulkSetSegments: Failed for item {0} marker {1}: {2}", itemId, markerType, ex.Message);
+                return new ApplyOutcome { Touched = true, Error = itemId + "/" + markerType + ": " + ex.Message };
+            }
+        }
+
+        private struct ApplyOutcome
+        {
+            public bool Touched;
+            public string Error;
         }
 
         public object Post(SyncNow request)

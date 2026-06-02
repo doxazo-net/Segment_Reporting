@@ -16,6 +16,7 @@ Documentation site: **https://sydlexius.github.io/Segment_Reporting/** (User Gui
 ### Editing & Bulk Operations
 
 - **Inline Editing** - Edit intro/credits timestamps directly in any table view (library, series, or query results) via a unified Actions dropdown menu
+- **Timing Adjustment** - Nudge intro or credits markers earlier/later in 250 ms steps from a per-row modal; apply the same relative shift to a whole selection in bulk, with a transient Undo for both individual and bulk adjustments
 - **Bulk Operations** - Copy intros, credits, or both across episodes (type-selective), bulk delete intros or credits, and set credits-to-end in bulk
 - **EmbyCredits Integration** - When the [EmbyCredits](https://github.com/faush01/EmbyCredits) plugin is installed, "Detect Credits" buttons appear on the dashboard, library, series, and custom query pages to trigger credits detection directly
 
