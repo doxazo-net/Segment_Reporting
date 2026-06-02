@@ -362,7 +362,10 @@ markers earlier or later in 250 ms steps without opening the full inline editor.
 2. Select **Adjust timing**.
 3. A modal appears with up to three rows:
    - **Intro** - moves IntroStart and IntroEnd together, preserving the intro
-     length. Use this when the intro starts too early or too late.
+     length. Use this when the intro starts too early or too late. This row is
+     only available when both the intro start and intro end markers are present;
+     if only one exists, this row is disabled - use the inline editor or the
+     **Intro end** row instead.
    - **Intro end** - moves only IntroEnd, leaving IntroStart unchanged. Use
      this to trim or extend the intro's end point.
    - **Credits** - moves CreditsStart earlier or later.

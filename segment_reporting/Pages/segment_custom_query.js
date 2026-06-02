@@ -2043,7 +2043,7 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
 
             function tickOf(name) {
                 var v = rowData[name];
-                return (v != null && v !== '') ? Number(v) : null;
+                return (v != null && v !== '' && Number(v) > 0) ? Number(v) : null;
             }
             var orig = {
                 ItemId: rowData['ItemId'],
@@ -2086,6 +2086,7 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                                     .then(function () { executeQuery(); })
                                     .catch(function (err) {
                                         helpers.showError('Undo failed: ' + (err && err.message ? err.message : 'unknown error'));
+                                        return Promise.reject(err);
                                     });
                             });
                         })
@@ -2121,7 +2122,7 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
 
             function tickOf(row, name) {
                 var v = row[name];
-                return (v != null && v !== '') ? Number(v) : null;
+                return (v != null && v !== '' && Number(v) > 0) ? Number(v) : null;
             }
 
             helpers.createOffsetModal({
@@ -2179,6 +2180,7 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                                     .then(function () { executeQuery(); })
                                     .catch(function (err) {
                                         helpers.showError('Undo failed: ' + (err && err.message ? err.message : 'unknown error'));
+                                        return Promise.reject(err);
                                     });
                             });
                         })

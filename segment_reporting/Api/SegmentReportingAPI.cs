@@ -817,18 +817,27 @@ namespace segment_reporting.Api
 
             _itemRepository.SaveChapters(embyItem.InternalId, chapterList);
 
-            SegmentRepository repo = GetRepository();
-            if (item.IntroStartTicks.HasValue)
+            // Emby is the source of truth and is now updated. A cache-write failure
+            // is reconciled by the next sync, so do not fail the operation here.
+            try
             {
-                repo.UpdateSegmentTicks(item.ItemId, MarkerTypes.IntroStart, item.IntroStartTicks.Value);
+                SegmentRepository repo = GetRepository();
+                if (item.IntroStartTicks.HasValue)
+                {
+                    repo.UpdateSegmentTicks(item.ItemId, MarkerTypes.IntroStart, item.IntroStartTicks.Value);
+                }
+                if (item.IntroEndTicks.HasValue)
+                {
+                    repo.UpdateSegmentTicks(item.ItemId, MarkerTypes.IntroEnd, item.IntroEndTicks.Value);
+                }
+                if (item.CreditsStartTicks.HasValue)
+                {
+                    repo.UpdateSegmentTicks(item.ItemId, MarkerTypes.CreditsStart, item.CreditsStartTicks.Value);
+                }
             }
-            if (item.IntroEndTicks.HasValue)
+            catch (Exception ex)
             {
-                repo.UpdateSegmentTicks(item.ItemId, MarkerTypes.IntroEnd, item.IntroEndTicks.Value);
-            }
-            if (item.CreditsStartTicks.HasValue)
-            {
-                repo.UpdateSegmentTicks(item.ItemId, MarkerTypes.CreditsStart, item.CreditsStartTicks.Value);
+                _logger.Warn("BulkSetSegments: cache update failed for item {0} after Emby save: {1}", item.ItemId, ex.Message);
             }
         }
 

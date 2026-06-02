@@ -1357,13 +1357,14 @@ function segmentReportingCreateOffsetModal(config) {
     footer.appendChild(applyBtn);
     dialog.appendChild(footer);
 
+    var applyInFlight = false;
     function close() {
         overlay.remove();
         if (config.onClose) { config.onClose(); }
     }
 
-    cancelBtn.addEventListener('click', close);
-    overlay.addEventListener('click', function (e) { if (e.target === overlay) { close(); } });
+    cancelBtn.addEventListener('click', function () { if (applyInFlight) { return; } close(); });
+    overlay.addEventListener('click', function (e) { if (applyInFlight) { return; } if (e.target === overlay) { close(); } });
 
     applyBtn.addEventListener('click', function () {
         var result;
@@ -1374,9 +1375,10 @@ function segmentReportingCreateOffsetModal(config) {
             result = { introStart: state.introStart, introEnd: state.introEnd, credits: state.credits };
         }
         applyBtn.disabled = true;
+        applyInFlight = true;
         var ret = config.onApply(result);
         if (ret && typeof ret.then === 'function') {
-            ret.then(close, function () { applyBtn.disabled = false; });
+            ret.then(close, function () { applyInFlight = false; applyBtn.disabled = false; });
         } else {
             close();
         }

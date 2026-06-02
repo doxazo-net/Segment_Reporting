@@ -1016,9 +1016,9 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
             var seasonIdForRefresh = seasonContainer ? seasonContainer.getAttribute('data-season-id') : null;
             var orig = {
                 ItemId: ep.ItemId,
-                introStart: ep.IntroStartTicks != null ? ep.IntroStartTicks : null,
-                introEnd: ep.IntroEndTicks != null ? ep.IntroEndTicks : null,
-                credits: ep.CreditsStartTicks != null ? ep.CreditsStartTicks : null
+                introStart: ep.IntroStartTicks > 0 ? ep.IntroStartTicks : null,
+                introEnd: ep.IntroEndTicks > 0 ? ep.IntroEndTicks : null,
+                credits: ep.CreditsStartTicks > 0 ? ep.CreditsStartTicks : null
             };
 
             helpers.createOffsetModal({
@@ -1063,6 +1063,7 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                                     })
                                     .catch(function (err) {
                                         helpers.showError('Undo failed: ' + (err && err.message ? err.message : 'unknown error'));
+                                        return Promise.reject(err);
                                     });
                             });
                         })
@@ -1098,18 +1099,18 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                     targets.forEach(function (t) {
                         var ci = { ItemId: t.ItemId, introStart: null, introEnd: null, credits: null };
                         var ui = { ItemId: t.ItemId, introStart: null, introEnd: null, credits: null };
-                        var nextIntroStart = t.IntroStartTicks;
-                        if (deltas.introDelta !== 0 && t.IntroStartTicks != null) {
+                        var nextIntroStart = t.IntroStartTicks > 0 ? t.IntroStartTicks : null;
+                        if (deltas.introDelta !== 0 && t.IntroStartTicks > 0) {
                             nextIntroStart = Math.max(0, t.IntroStartTicks + deltas.introDelta);
                             ci.introStart = nextIntroStart;
                             ui.introStart = t.IntroStartTicks;
                         }
-                        if (endTotal !== 0 && t.IntroEndTicks != null) {
+                        if (endTotal !== 0 && t.IntroEndTicks > 0) {
                             var minEnd = nextIntroStart != null ? nextIntroStart : 0;
                             ci.introEnd = Math.max(minEnd, t.IntroEndTicks + endTotal);
                             ui.introEnd = t.IntroEndTicks;
                         }
-                        if (deltas.creditsDelta !== 0 && t.CreditsStartTicks != null) {
+                        if (deltas.creditsDelta !== 0 && t.CreditsStartTicks > 0) {
                             ci.credits = Math.max(0, t.CreditsStartTicks + deltas.creditsDelta);
                             ui.credits = t.CreditsStartTicks;
                         }
@@ -1141,6 +1142,7 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                                     })
                                     .catch(function (err) {
                                         helpers.showError('Undo failed: ' + (err && err.message ? err.message : 'unknown error'));
+                                        return Promise.reject(err);
                                     });
                             });
                         })

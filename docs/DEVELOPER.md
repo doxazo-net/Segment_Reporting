@@ -1700,7 +1700,7 @@ call that backs both per-row and bulk apply/undo.
 | Function | Description |
 |----------|-------------|
 | `createOffsetModal(config)` | Builds and returns the offset adjustment modal DOM element. `config` describes which marker rows to show (intro, introEnd, credits) and their current tick values. The modal renders left/right arrow buttons for each row; arrows that would produce a negative tick are disabled. |
-| `showOffsetSnackbar(message, onUndo)` | Displays a brief transient snackbar with the given message and an **Undo** button. Calls `onUndo()` if the user clicks Undo before the snackbar auto-dismisses. |
+| `showOffsetSnackbar(message, onUndo)` | Displays a transient snackbar with the given message and an **Undo** button; auto-dismisses after 12 seconds (12000 ms). Calls `onUndo()` if the user clicks Undo before it dismisses. |
 | `buildBulkSetBody(items)` | Accepts an array of objects (each with `itemId`, `introStartTicks`, `introEndTicks`, `creditsStartTicks`; null means untouched) and constructs the comma-separated query-string parameters expected by `POST /segment_reporting/bulk_set_segments`. |
 | `applyBulkSet(items)` | Calls `buildBulkSetBody`, posts to `bulk_set_segments`, and returns a Promise resolving to the `{ succeeded, failed, errors }` response. Used by both the single-item modal Apply path and the multi-item bulk Apply path. |
 

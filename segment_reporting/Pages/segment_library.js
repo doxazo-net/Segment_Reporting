@@ -692,9 +692,9 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
         function adjustMovieOffset(row, movie) {
             var orig = {
                 ItemId: movie.ItemId,
-                introStart: movie.IntroStartTicks != null ? movie.IntroStartTicks : null,
-                introEnd: movie.IntroEndTicks != null ? movie.IntroEndTicks : null,
-                credits: movie.CreditsStartTicks != null ? movie.CreditsStartTicks : null
+                introStart: movie.IntroStartTicks > 0 ? movie.IntroStartTicks : null,
+                introEnd: movie.IntroEndTicks > 0 ? movie.IntroEndTicks : null,
+                credits: movie.CreditsStartTicks > 0 ? movie.CreditsStartTicks : null
             };
 
             function refreshMovieRowById() {
@@ -738,6 +738,7 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                                     .then(refreshMovieRowById)
                                     .catch(function (err) {
                                         helpers.showError('Undo failed: ' + (err && err.message ? err.message : 'unknown error'));
+                                        return Promise.reject(err);
                                     });
                             });
                         })
