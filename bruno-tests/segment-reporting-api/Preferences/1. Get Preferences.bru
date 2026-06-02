@@ -18,6 +18,14 @@ assert {
   res.status: eq 200
 }
 
+tests {
+  test("preferences returns a non-array object", function() {
+    const b = res.getBody();
+    expect(b).to.be.an("object");
+    expect(Array.isArray(b)).to.be.false;
+  });
+}
+
 docs {
   ## Get Preferences
 

@@ -20,7 +20,10 @@ assert {
 
 tests {
   test("plugin_info carries a version", function() {
-    expect(res.getBody()).to.have.property("version");
+    const b = res.getBody();
+    expect(b).to.have.property("name");
+    expect(b).to.have.property("version");
+    expect(b).to.have.property("description");
   });
 }
 

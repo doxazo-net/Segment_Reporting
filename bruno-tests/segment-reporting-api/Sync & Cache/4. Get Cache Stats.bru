@@ -18,6 +18,17 @@ assert {
   res.status: eq 200
 }
 
+tests {
+  test("cache_stats returns expected fields", function() {
+    const b = res.getBody();
+    expect(b).to.have.property("rowCount");
+    expect(b).to.have.property("dbFileSize");
+    expect(b).to.have.property("lastFullSync");
+    expect(b).to.have.property("itemsScanned");
+    expect(b).to.have.property("syncDuration");
+  });
+}
+
 docs {
   ## Get Cache Stats
 

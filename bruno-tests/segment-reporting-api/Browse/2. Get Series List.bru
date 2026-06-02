@@ -22,6 +22,9 @@ tests {
   test("series_list returns contentType + lists", function() {
     const b = res.getBody();
     expect(b).to.have.property("contentType");
+    expect(["series", "movies", "mixed"]).to.include(b.contentType);
+    expect(b).to.have.property("series");
+    expect(b).to.have.property("movies");
   });
 }
 

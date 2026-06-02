@@ -20,8 +20,8 @@ delete_lib() {
         | jq -r --arg n "$name" 'map(select(.Name==$n)) | (.[0].ItemId // .[0].Id // empty)')"
     if [ -n "$id" ]; then
         log "Deleting library '$name' (id=$id)"
-        curl -s -o /dev/null -X DELETE \
-            "${BASE_URL}/emby/Library/VirtualFolders?api_key=${API_KEY}&id=${id}" || true
+        curl -s -o /dev/null -X DELETE -H "X-Emby-Token: ${API_KEY}" \
+            "${BASE_URL}/emby/Library/VirtualFolders?id=${id}" || true
     else
         log "Library '$name' not present"
     fi

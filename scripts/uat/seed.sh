@@ -26,8 +26,8 @@ delete_lib() {
         | jq -r --arg n "$name" 'map(select(.Name==$n)) | (.[0].ItemId // .[0].Id // empty)')"
     if [ -n "$id" ]; then
         log "Removing prior library '$name' (id=$id)"
-        curl -s -o /dev/null -X DELETE \
-            "${BASE_URL}/emby/Library/VirtualFolders?api_key=${API_KEY}&id=${id}" || true
+        curl -s -o /dev/null -X DELETE -H "X-Emby-Token: ${API_KEY}" \
+            "${BASE_URL}/emby/Library/VirtualFolders?id=${id}" || true
     fi
 }
 
@@ -50,8 +50,8 @@ create_lib() {
     # create_lib <Name> <collectionType> <path>
     local name="$1" ctype="$2" path="$3"
     log "Creating library '$name' ($ctype) -> $path"
-    curl -fsS -X POST \
-        "${BASE_URL}/emby/Library/VirtualFolders?api_key=${API_KEY}&name=$(jq -rn --arg n "$name" '$n|@uri')&collectionType=${ctype}&paths=${path}&refreshLibrary=true" \
+    curl -fsS -X POST -H "X-Emby-Token: ${API_KEY}" \
+        "${BASE_URL}/emby/Library/VirtualFolders?name=$(jq -rn --arg n "$name" '$n|@uri')&collectionType=${ctype}&paths=${path}&refreshLibrary=true" \
         -o /dev/null -w 'HTTP %{http_code}\n'
 }
 create_lib "SR-UAT-TV"     tvshows /uat-media/SR-UAT-TV
@@ -68,7 +68,8 @@ sr_post /emby/segment_reporting/sync_now '' | tee "$RUN_LOG_DIR/sync.log"
 sleep 10
 
 # --- discover episode + movie IDs for marker writes ------------------------
-# (sr_get appends api_key itself; pass only the real query params)
+# (sr_get sends the api key via the X-Emby-Token header; pass only the real
+# query params here)
 items_json="$(sr_get /emby/Items \
     'Recursive=true&IncludeItemTypes=Episode,Movie&Fields=Path')"
 mapfile -t ep_ids < <(echo "$items_json" | jq -r '

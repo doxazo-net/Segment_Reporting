@@ -23,6 +23,9 @@ tests {
     const rows = res.getBody();
     expect(Array.isArray(rows)).to.be.true;
     if (rows.length > 0) {
+      expect(rows[0]).to.have.property("LibraryId");
+      expect(rows[0]).to.have.property("LibraryName");
+      expect(rows[0]).to.have.property("TotalItems");
       expect(rows[0]).to.have.property("WithIntro");
       expect(rows[0]).to.have.property("WithCredits");
       expect(rows[0]).to.have.property("WithBoth");

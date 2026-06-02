@@ -20,7 +20,15 @@ assert {
 
 tests {
   test("season_list returns an array", function() {
-    expect(Array.isArray(res.getBody())).to.be.true;
+    const rows = res.getBody();
+    expect(Array.isArray(rows)).to.be.true;
+    if (rows.length > 0) {
+      expect(rows[0]).to.have.property("SeasonId");
+      expect(rows[0]).to.have.property("SeasonName");
+      expect(rows[0]).to.have.property("TotalEpisodes");
+      expect(rows[0]).to.have.property("WithIntro");
+      expect(rows[0]).to.have.property("WithCredits");
+    }
   });
 }
 

@@ -79,28 +79,30 @@ SR_CURL_OPTS=(--connect-timeout 5 --max-time 30)
 
 log() { printf '[uat] %s\n' "$*"; }
 
+# The API key travels in the X-Emby-Token header (not the URL query string) so
+# it never lands in Emby's access logs or the local process table (ps).
 sr_get() {
     local path="$1"; shift || true
     local qs="${1:-}"
-    local url="${BASE_URL}${path}?api_key=${API_KEY}"
-    [ -n "$qs" ] && url="${url}&${qs}"
-    curl -fsS "${SR_CURL_OPTS[@]}" "$url"
+    local url="${BASE_URL}${path}"
+    [ -n "$qs" ] && url="${url}?${qs}"
+    curl -fsS "${SR_CURL_OPTS[@]}" -H "X-Emby-Token: ${API_KEY}" "$url"
 }
 
 sr_post() {
     local path="$1"; shift || true
     local qs="${1:-}"
-    local url="${BASE_URL}${path}?api_key=${API_KEY}"
-    [ -n "$qs" ] && url="${url}&${qs}"
-    curl -fsS "${SR_CURL_OPTS[@]}" -X POST "$url"
+    local url="${BASE_URL}${path}"
+    [ -n "$qs" ] && url="${url}?${qs}"
+    curl -fsS "${SR_CURL_OPTS[@]}" -H "X-Emby-Token: ${API_KEY}" -X POST "$url"
 }
 
 sr_status() {
     local path="$1"; shift || true
     local qs="${1:-}"
-    local url="${BASE_URL}${path}?api_key=${API_KEY}"
-    [ -n "$qs" ] && url="${url}&${qs}"
-    curl -s -o /dev/null -w '%{http_code}' "${SR_CURL_OPTS[@]}" "$url"
+    local url="${BASE_URL}${path}"
+    [ -n "$qs" ] && url="${url}?${qs}"
+    curl -s -o /dev/null -w '%{http_code}' "${SR_CURL_OPTS[@]}" -H "X-Emby-Token: ${API_KEY}" "$url"
 }
 
 jqf() { jq -r "$1"; }
