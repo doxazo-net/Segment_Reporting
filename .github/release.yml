@@ -6,30 +6,30 @@ changelog:
     authors:
       - dependabot
   categories:
-    - title: 🚀 Features
+    - title: Features
       labels:
         - feature
         - enhancement
         - new
-    - title: 🐛 Bug Fixes
+    - title: Bug Fixes
       labels:
         - bug
         - fix
         - bugfix
-    - title: 📚 Documentation
+    - title: Documentation
       labels:
         - documentation
         - docs
-    - title: 🏗️ Infrastructure
+    - title: Infrastructure
       labels:
         - ci
         - build
         - infra
-    - title: 🔧 Maintenance
+    - title: Maintenance
       labels:
         - refactor
         - chore
         - maintenance
-    - title: 📦 Other Changes
+    - title: Other Changes
       labels:
         - "*"
