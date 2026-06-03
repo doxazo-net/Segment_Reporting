@@ -868,6 +868,58 @@ curl -X POST -H "X-Emby-Token: $KEY" \
 
 ---
 
+**`POST /segment_reporting/bulk_set_segments`**{ #post-segment_reportingbulk_set_segments }
+
+Sets absolute tick values for up to three marker types across multiple items.
+This endpoint backs both the offset-adjustment **Apply** action and the
+subsequent **Undo** action. The client computes absolute target tick values;
+the server does no delta math.
+
+**Parameters:**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `ItemIds` | string | Yes | Comma-separated item IDs |
+| `IntroStartTicks` | string | No | Comma-separated tick values, index-aligned to `ItemIds`. An empty token (e.g., `,,`) leaves that marker untouched for that item. Omitting the parameter entirely leaves IntroStart untouched for all items. |
+| `IntroEndTicks` | string | No | Same format as `IntroStartTicks`, controls IntroEnd. |
+| `CreditsStartTicks` | string | No | Same format as `IntroStartTicks`, controls CreditsStart. |
+
+**Response:**
+
+```json
+{ "succeeded": 10, "failed": 0, "errors": [] }
+```
+
+**Behavior:** For each item and each non-empty tick token, validates that the
+tick value is >= 0, then writes through to Emby via
+`IItemRepository.SaveChapters()` and updates the SQLite cache. Items or tokens
+that produce an error are counted in `failed` without aborting the rest.
+
+**Server implementation helpers** (all in `Api/SegmentReportingAPI.cs`):
+
+| Class / Method | Description |
+|----------------|-------------|
+| `BulkSetItem` | Plain data struct holding a parsed (ItemId, IntroStartTicks?, IntroEndTicks?, CreditsStartTicks?) tuple for one item. |
+| `BulkSetParser` | Static class. Parses and validates the comma-separated tick columns from the request, aligning them to the `ItemIds` array. Returns a list of `BulkSetItem` or an error string. Validates that every non-empty token is a non-negative long. |
+| `ExecuteBulkValueSet(items)` | Iterates over the parsed `BulkSetItem` list and applies each non-null tick value write-through (Emby chapters then SQLite cache). Accumulates succeeded/failed/errors and returns a bulk-result object. |
+
+**Errors:**
+
+| Condition | Response |
+|-----------|----------|
+| Missing `ItemIds` | `{ "error": "itemIds is required" }` |
+| Too many items | `{ "error": "Maximum 500 items per batch" }` |
+| Negative tick value | Per-item error string in `errors` array |
+| Item not found | Per-item error string in `errors` array |
+
+```bash
+# Move IntroStart and IntroEnd 250 ms later for two items
+curl -X POST -H "X-Emby-Token: $KEY" \
+  "http://localhost:8096/emby/segment_reporting/bulk_set_segments?ItemIds=12345,12346&IntroStartTicks=52500000,52500000&IntroEndTicks=902500000,902500000"
+```
+
+---
+
 **`POST /segment_reporting/bulk_set_credits_end`**{ #post-segment_reportingbulk_set_credits_end }
 
 Sets `CreditsStart` to each item's runtime minus an offset. Useful for batch-
@@ -1640,6 +1692,18 @@ background color to render correctly on both light and dark Emby themes.
 | `bulkSetCreditsEnd(itemIds, offsetTicks)` | Prompts for confirmation, then calls `bulk_set_credits_end`. Returns a Promise. |
 | `bulkDetectCredits(items)` | Sequentially calls EmbyCredits `ProcessEpisode` for each item. Returns a Promise with aggregate results. |
 
+#### Timing Adjustment
+
+These helpers implement the offset adjustment modal and the `bulk_set_segments`
+call that backs both per-row and bulk apply/undo.
+
+| Function | Description |
+|----------|-------------|
+| `createOffsetModal(config)` | Builds and returns the offset adjustment modal DOM element. `config` describes which marker rows to show (intro, introEnd, credits) and their current tick values. The modal renders left/right arrow buttons for each row; arrows that would produce a negative tick are disabled. |
+| `showOffsetSnackbar(message, onUndo)` | Displays a transient snackbar with the given message and an **Undo** button; auto-dismisses after 12 seconds (12000 ms). Calls `onUndo()` if the user clicks Undo before it dismisses. |
+| `buildBulkSetBody(items)` | Accepts an array of objects (each with `itemId`, `introStartTicks`, `introEndTicks`, `creditsStartTicks`; null means untouched) and constructs the comma-separated query-string parameters expected by `POST /segment_reporting/bulk_set_segments`. |
+| `applyBulkSet(items)` | Calls `buildBulkSetBody`, posts to `bulk_set_segments`, and returns a Promise resolving to the `{ succeeded, failed, errors }` response. Used by both the single-item modal Apply path and the multi-item bulk Apply path. |
+
 #### External Plugin Integration
 
 | Function | Description |
@@ -1895,8 +1959,9 @@ Shows series and/or movies within a single library.
 - Search box with 300ms debounced input
 - Stacked bar chart of coverage by series or movie
 - Series table with sortable columns (click headers to sort)
-- Movie table with inline tick timestamps, Edit/Delete actions
+- Movie table with inline tick timestamps, Edit/Adjust timing/Delete actions
 - Inline editing for movies (text inputs for tick values, Save/Cancel)
+- Per-row timing adjustment for movies via the offset modal
 - Movie segment deletion via dropdown menu
 
 **Patterns demonstrated:** Client-side filtering and sorting, dual table
@@ -1914,13 +1979,16 @@ episode tables inside each section.
 - Season coverage bar chart (intro % and credits % per season)
 - Collapsible season accordion (first season auto-expanded)
 - Episode tables with checkboxes for multi-select
-- Unified **Actions** dropdown per episode row (Edit, Copy submenu, Delete
-  submenu, Set Credits to End, Detect Credits)
+- Unified **Actions** dropdown per episode row (Edit, Adjust timing, Copy
+  submenu, Delete submenu, Set Credits to End, Detect Credits)
 - Copy submenu with type selection: Intros / Credits / Both
 - Delete submenu with grouped deletion: Intros / Credits / Both
+- Timing adjustment modal (per-row and bulk) via `createOffsetModal` /
+  `applyBulkSet` / `showOffsetSnackbar`
 - Type-aware bulk source banner (e.g., "Copying intros from Episode 3")
 - Season-level **Actions** dropdown (Delete submenu, Set Credits to End,
-  Apply Source, Detect All/Detect Missing via EmbyCredits `ProcessSeason`)
+  Adjust timing (bulk), Apply Source, Detect All/Detect Missing via
+  EmbyCredits `ProcessSeason`)
 - Selection-aware bulk buttons (show count when items are checked)
 - Per-episode, per-series, and season-level Actions dropdown credits detection
   (EmbyCredits `ProcessSeason` / `ProcessSeasonMissingMarkers` endpoints)
@@ -1944,8 +2012,10 @@ A SQL editor with a visual query builder and saved query management.
 - Unified dropdown combining built-in (canned) queries and user-saved queries
 - Save / Delete / Overwrite saved queries
 - Query execution with results displayed in a dynamic table
-- Per-row **Actions** dropdown (Edit, Delete submenu, Set Credits to End,
-  Detect Credits) - shown whenever `ItemId` is present in the result columns
+- Per-row **Actions** dropdown (Edit, Adjust timing, Delete submenu, Set
+  Credits to End, Detect Credits) - shown whenever `ItemId` is present in
+  the result columns
+- Bulk timing adjustment via the offset modal and `applyBulkSet`
 - Tick columns automatically formatted as `HH:MM:SS.fff`
 - CSV export of query results
 - Clear button to reset the interface
@@ -2132,6 +2202,29 @@ branches. Runs on `ubuntu-latest`.
 files are what gets compiled into the DLL as embedded resources. The MSBuild
 targets in the csproj handle this automatically for local Release builds, but
 CI runs the npm scripts explicitly for clarity.
+
+### Documentation Site (Pages) Build
+
+The docs site is built by `.github/workflows/pages.yml` (ProperDocs + Material).
+Its Python dependencies are hash-pinned for supply-chain integrity (Scorecard
+Pinned-Dependencies):
+
+- `dev-requirements.txt` is the human-editable source (top-level pins only).
+- `dev-requirements.lock` is the fully resolved, hash-pinned lock covering direct
+  and transitive packages, each with one or more `--hash=sha256:...` entries. CI
+  installs with `pip install --require-hashes -r dev-requirements.lock`, which
+  rejects the install if any resolved package lacks a matching hash.
+
+Regenerate the lock after editing `dev-requirements.txt`:
+
+```bash
+uv pip compile --generate-hashes --universal dev-requirements.txt -o dev-requirements.lock
+# or, with pip-tools:
+pip-compile --generate-hashes --allow-unsafe --output-file=dev-requirements.lock dev-requirements.txt
+```
+
+Local docs builds (`make docs-deps`) still install from `dev-requirements.txt`
+for convenience; only CI enforces hashes.
 
 ### Release Job
 

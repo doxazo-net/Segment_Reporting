@@ -16,6 +16,7 @@ Documentation site: **https://sydlexius.github.io/Segment_Reporting/** (User Gui
 ### Editing & Bulk Operations
 
 - **Inline Editing** - Edit intro/credits timestamps directly in any table view (library, series, or query results) via a unified Actions dropdown menu
+- **Timing Adjustment** - Nudge intro or credits markers earlier/later in 250 ms steps from a per-row modal; apply the same relative shift to a whole selection in bulk, with a transient Undo for both individual and bulk adjustments
 - **Bulk Operations** - Copy intros, credits, or both across episodes (type-selective), bulk delete intros or credits, and set credits-to-end in bulk
 - **EmbyCredits Integration** - When the [EmbyCredits](https://github.com/faush01/EmbyCredits) plugin is installed, "Detect Credits" buttons appear on the dashboard, library, series, and custom query pages to trigger credits detection directly
 
@@ -82,6 +83,16 @@ dotnet build --configuration Release
 ```
 
 The compiled DLL will be in `bin/Release/`.
+
+### Testing
+
+A `Makefile` wraps the common workflows (run `make help` for the list):
+
+- `make test` - xUnit unit suite for pure logic (custom-query validators, marker types).
+- `make gate` - the full CI-parity pre-push gate (Release build with analyzers as errors, unit tests, format check, JS lint); also run by the git pre-push hook.
+- `make uat-deploy` / `uat-seed` / `uat-test` / `uat-concurrency` / `uat` - the UAT Emby harness, which exercises the full write path and the lock-ordering concurrency guard against a real Emby server (Docker/OrbStack). These are local-only manual gates; they need a running UAT Emby and a gitignored `.env`, and never run in CI.
+
+See the [Developer Guide](docs/DEVELOPER.md) for the full testing and UAT workflow.
 
 ### Dependencies
 

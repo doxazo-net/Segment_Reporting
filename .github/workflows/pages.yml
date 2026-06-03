@@ -8,6 +8,7 @@ on:
       - 'README.md'
       - 'properdocs.yml'
       - 'dev-requirements.txt'
+      - 'dev-requirements.lock'
       - '.github/workflows/pages.yml'
   pull_request:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - 'README.md'
       - 'properdocs.yml'
       - 'dev-requirements.txt'
+      - 'dev-requirements.lock'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -43,10 +45,10 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-          cache-dependency-path: dev-requirements.txt
+          cache-dependency-path: dev-requirements.lock
 
       - name: Install ProperDocs and plugins
-        run: pip install -r dev-requirements.txt
+        run: pip install --require-hashes -r dev-requirements.lock
 
       - name: Build site (ProperDocs, strict)
         run: properdocs build --strict

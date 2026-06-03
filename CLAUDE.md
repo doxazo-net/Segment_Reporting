@@ -12,7 +12,8 @@ The design document at [docs/plans/2026-02-06-segment-reporting-design.md](docs/
 
 Common dev tasks are wrapped in a `Makefile` (run `make help` for the full
 list: `build`, `test`, `format`, `lint`, `gate`, `hooks`, `docs`, `screenshots`,
-`clean`). The Makefile only wraps the commands below; CI invokes them directly.
+`clean`, plus the UAT harness targets below). The Makefile only wraps the
+commands below; CI invokes them directly.
 
 ```bash
 # Restore and build
@@ -22,11 +23,34 @@ dotnet build segment_reporting/segment_reporting.csproj -c Release
 # Unit tests (xUnit) for pure logic (custom-query validators, marker types).
 # The test project targets net8.0 (matches CI); RollForward lets it run on a
 # newer local runtime if the 8.0 runtime is not installed.
-dotnet test Segment_Reporting.sln
+dotnet test Segment_Reporting.sln        # or: make test
 
-# Integration/manual testing still requires a running Emby server: copy the
-# built DLL into Emby's plugins directory and restart.
+# Full CI-parity pre-push gate (Release build with analyzers-as-errors, format
+# check, JS lint, and the xUnit suite). The lefthook pre-push hook runs this.
+make gate
 ```
+
+**Analyzers:** the plugin builds with StyleCop, Roslynator, IDisposableAnalyzers,
+and `Microsoft.VisualStudio.Threading.Analyzers` under `-warnaserror`, so analyzer
+warnings fail the Release build (enforced by `make gate` and CI).
+
+**Integration / UAT testing** runs against a real Emby server via the UAT harness
+(`scripts/uat/*`, Docker/OrbStack `emby` container), not by hand-copying DLLs:
+
+```bash
+make uat-deploy        # build + docker cp the DLL into the container, restart
+make uat-seed          # generate synthetic media, libraries, markers (idempotent)
+make uat-test          # run the Bruno API assertions (alias: make bruno)
+make uat-concurrency   # stress SegmentRepository lock ordering (#66) under load
+make uat               # full chain: deploy -> seed -> test
+```
+
+`make uat-concurrency` is the runtime concurrency guard: the plugin's SQLite
+stack (`SQLitePCL.pretty` + Emby's bundled raw provider) cannot be hosted outside
+Emby, so lock-ordering is exercised against the live server, not a unit test. The
+UAT and fuzz targets are local-only manual gates (need the UAT Emby up and seeded;
+read `EMBY_UAT_*` from a gitignored `.env`); they never run in CI or a git hook.
+See `docs/DEVELOPER.md` (UAT Emby Harness) for the full workflow.
 
 ## Architecture
 

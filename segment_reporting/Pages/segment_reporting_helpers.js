@@ -1132,6 +1132,318 @@ function segmentReportingCreateInlineEditor(config) {
     };
 }
 
+// ── Offset adjustment (issue #80) ──
+
+var SEGMENT_REPORTING_OFFSET_STEP_TICKS = 2500000; // 250ms
+
+// items: array of { ItemId, introStart, introEnd, credits } where each tick
+// field is a number (absolute target) or null/undefined (leave untouched).
+// Produces the index-aligned, comma-separated body for bulk_set_segments.
+// A column that is untouched for ALL items is sent as an empty string.
+function segmentReportingBuildBulkSetBody(items) {
+    var ids = [];
+    var intro = [];
+    var introEnd = [];
+    var credits = [];
+
+    items.forEach(function (it) {
+        ids.push(it.ItemId);
+        intro.push(it.introStart != null ? String(it.introStart) : '');
+        introEnd.push(it.introEnd != null ? String(it.introEnd) : '');
+        credits.push(it.credits != null ? String(it.credits) : '');
+    });
+
+    function allEmpty(arr) {
+        return arr.every(function (x) { return x === ''; });
+    }
+
+    return {
+        ItemIds: ids.join(','),
+        IntroStartTicks: allEmpty(intro) ? '' : intro.join(','),
+        IntroEndTicks: allEmpty(introEnd) ? '' : introEnd.join(','),
+        CreditsStartTicks: allEmpty(credits) ? '' : credits.join(',')
+    };
+}
+
+function segmentReportingApplyBulkSet(items) {
+    var body = segmentReportingBuildBulkSetBody(items);
+    return segmentReportingApiCall('bulk_set_segments', 'POST', JSON.stringify(body))
+        .then(function (res) {
+            if (res && res.error) {
+                return Promise.reject(new Error(res.error));
+            }
+            return res;
+        });
+}
+
+// Strict variant for undo/restore flows. The main-apply callers inspect
+// res.failed themselves (to show "Adjusted X, Y failed" partial-success
+// messaging), but undo handlers rely on promise rejection to keep the
+// snackbar open. This variant also rejects on in-band item failures so a
+// failed restore cannot dismiss as if it succeeded.
+function segmentReportingApplyBulkSetStrict(items) {
+    return segmentReportingApplyBulkSet(items).then(function (res) {
+        if (res && res.failed > 0) {
+            var msg = res.errors && res.errors.length
+                ? res.errors.join('; ')
+                : res.failed + ' item(s) failed';
+            return Promise.reject(new Error(msg));
+        }
+        return res;
+    });
+}
+
+// config:
+//   title    - string heading
+//   mode     - 'individual' | 'bulk'
+//   isLight  - boolean (theme)
+//   current  - individual only: { introStart, introEnd, credits } absolute ticks
+//              or null when that marker is absent (its row is disabled)
+//   onApply  - function(result): may return a Promise. Modal closes on resolve.
+//              individual result: { introStart, introEnd, credits } absolute (or null)
+//              bulk result:       { introDelta, introEndDelta, creditsDelta } in ticks
+//   onClose  - optional function() called after the modal is dismissed
+function segmentReportingCreateOffsetModal(config) {
+    if (document.querySelector('.segment-offset-overlay')) {
+        return null;
+    }
+    var STEP = SEGMENT_REPORTING_OFFSET_STEP_TICKS;
+    var isBulk = config.mode === 'bulk';
+
+    var overlay = document.createElement('div');
+    overlay.className = 'segment-offset-overlay';
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;';
+
+    var dialog = document.createElement('div');
+    dialog.style.cssText = 'background: ' + (config.isLight ? '#ffffff' : '#1f1f1f') +
+        '; color: ' + (config.isLight ? '#000000' : '#ffffff') +
+        '; border-radius: 6px; padding: 1.25em 1.5em; min-width: 360px; max-width: 90vw; box-shadow: 0 4px 24px rgba(0,0,0,0.4);';
+
+    var heading = document.createElement('h3');
+    heading.textContent = config.title;
+    heading.style.cssText = 'margin: 0 0 0.75em 0; font-size: 1.1em;';
+    dialog.appendChild(heading);
+
+    var state;
+    if (isBulk) {
+        state = { introDelta: 0, introEndDelta: 0, creditsDelta: 0 };
+    } else {
+        var c = config.current || {};
+        state = {
+            introStart: c.introStart != null ? c.introStart : null,
+            introEnd: c.introEnd != null ? c.introEnd : null,
+            credits: c.credits != null ? c.credits : null
+        };
+    }
+
+    function fmtDelta(ticks) {
+        if (!ticks) { return '0'; }
+        return (ticks < 0 ? '-' : '+') + segmentReportingTicksToTime(Math.abs(ticks));
+    }
+
+    var rows = [];
+    if (isBulk) {
+        rows.push({ label: 'Intro', hint: 'moves whole intro', enabled: true,
+            step: function (d) { state.introDelta += d * STEP; },
+            leftDisabled: function () { return false; },
+            display: function () { return fmtDelta(state.introDelta); } });
+        rows.push({ label: 'Intro end', hint: 'trim / extend end', enabled: true,
+            step: function (d) { state.introEndDelta += d * STEP; },
+            leftDisabled: function () { return false; },
+            display: function () { return fmtDelta(state.introEndDelta); } });
+        rows.push({ label: 'Credits', hint: '', enabled: true,
+            step: function (d) { state.creditsDelta += d * STEP; },
+            leftDisabled: function () { return false; },
+            display: function () { return fmtDelta(state.creditsDelta); } });
+    } else {
+        var hasIntro = state.introStart != null && state.introEnd != null;
+        rows.push({ label: 'Intro', hint: 'moves whole intro, keeps length', enabled: hasIntro,
+            step: function (d) {
+                var delta = d * STEP;
+                if (delta < 0) {
+                    var present = [];
+                    if (state.introStart != null) { present.push(state.introStart); }
+                    if (state.introEnd != null) { present.push(state.introEnd); }
+                    var floor = present.length ? Math.min.apply(null, present) : 0;
+                    if (delta < -floor) { delta = -floor; }
+                }
+                if (state.introStart != null) { state.introStart += delta; }
+                if (state.introEnd != null) { state.introEnd += delta; }
+            },
+            leftDisabled: function () {
+                var vals = [];
+                if (state.introStart != null) { vals.push(state.introStart); }
+                if (state.introEnd != null) { vals.push(state.introEnd); }
+                return vals.length === 0 || Math.min.apply(null, vals) <= 0;
+            },
+            display: function () {
+                return segmentReportingTicksToTime(state.introStart) + ' -> ' + segmentReportingTicksToTime(state.introEnd);
+            } });
+        rows.push({ label: 'Intro end', hint: 'trim / extend the end only', enabled: state.introEnd != null,
+            step: function (d) {
+                if (state.introEnd != null) {
+                    var floor = state.introStart != null ? state.introStart : 0;
+                    state.introEnd = Math.max(floor, state.introEnd + d * STEP);
+                }
+            },
+            leftDisabled: function () {
+                var floor = state.introStart != null ? state.introStart : 0;
+                return state.introEnd == null || state.introEnd <= floor;
+            },
+            display: function () { return segmentReportingTicksToTime(state.introEnd); } });
+        rows.push({ label: 'Credits', hint: '', enabled: state.credits != null,
+            step: function (d) { if (state.credits != null) { state.credits = Math.max(0, state.credits + d * STEP); } },
+            leftDisabled: function () { return state.credits == null || state.credits <= 0; },
+            display: function () { return segmentReportingTicksToTime(state.credits); } });
+    }
+
+    var refreshers = [];
+    rows.forEach(function (r) {
+        var rowEl = document.createElement('div');
+        rowEl.style.cssText = 'display: flex; align-items: center; gap: 0.5em; margin: 0.5em 0; flex-wrap: wrap;' + (r.enabled ? '' : ' opacity: 0.4;');
+
+        var labelEl = document.createElement('div');
+        labelEl.textContent = r.label;
+        labelEl.style.cssText = 'width: 5.5em; flex: 0 0 auto;';
+
+        var leftBtn = document.createElement('button');
+        leftBtn.type = 'button';
+        leftBtn.className = 'raised emby-button';
+        leftBtn.innerHTML = '&#8592;';
+        leftBtn.style.cssText = 'padding: 0.1em 0.6em; font-size: 1.1em;';
+
+        var valueEl = document.createElement('div');
+        valueEl.style.cssText = 'flex: 1 1 auto; text-align: center; font-family: monospace; min-width: 9em;';
+
+        var rightBtn = document.createElement('button');
+        rightBtn.type = 'button';
+        rightBtn.className = 'raised emby-button';
+        rightBtn.innerHTML = '&#8594;';
+        rightBtn.style.cssText = 'padding: 0.1em 0.6em; font-size: 1.1em;';
+
+        function refresh() {
+            valueEl.textContent = r.display();
+            leftBtn.disabled = !r.enabled || r.leftDisabled();
+        }
+
+        if (r.enabled) {
+            leftBtn.addEventListener('click', function () { r.step(-1); refreshAll(); });
+            rightBtn.addEventListener('click', function () { r.step(1); refreshAll(); });
+        } else {
+            leftBtn.disabled = true;
+            rightBtn.disabled = true;
+        }
+
+        rowEl.appendChild(labelEl);
+        rowEl.appendChild(leftBtn);
+        rowEl.appendChild(valueEl);
+        rowEl.appendChild(rightBtn);
+
+        if (r.hint) {
+            var hintEl = document.createElement('div');
+            hintEl.textContent = r.hint;
+            hintEl.style.cssText = 'flex-basis: 100%; font-size: 0.75em; opacity: 0.6; padding-left: 6em;';
+            rowEl.appendChild(hintEl);
+        }
+
+        dialog.appendChild(rowEl);
+        refreshers.push(refresh);
+    });
+
+    function refreshAll() {
+        refreshers.forEach(function (fn) { fn(); });
+    }
+    refreshAll();
+
+    var footer = document.createElement('div');
+    footer.style.cssText = 'display: flex; justify-content: flex-end; gap: 0.5em; margin-top: 1em;';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'raised button-cancel emby-button';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = 'padding: 0.4em 1em;';
+
+    var applyBtn = document.createElement('button');
+    applyBtn.type = 'button';
+    applyBtn.className = 'raised emby-button';
+    applyBtn.textContent = 'Apply';
+    applyBtn.style.cssText = 'padding: 0.4em 1em; background-color: #4CAF50;';
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(applyBtn);
+    dialog.appendChild(footer);
+
+    var applyInFlight = false;
+    function close() {
+        overlay.remove();
+        if (config.onClose) { config.onClose(); }
+    }
+
+    cancelBtn.addEventListener('click', function () { if (applyInFlight) { return; } close(); });
+    overlay.addEventListener('click', function (e) { if (applyInFlight) { return; } if (e.target === overlay) { close(); } });
+
+    applyBtn.addEventListener('click', function () {
+        var result;
+        if (isBulk) {
+            result = { introDelta: state.introDelta, introEndDelta: state.introEndDelta, creditsDelta: state.creditsDelta };
+            if (!result.introDelta && !result.introEndDelta && !result.creditsDelta) { close(); return; }
+        } else {
+            result = { introStart: state.introStart, introEnd: state.introEnd, credits: state.credits };
+        }
+        applyBtn.disabled = true;
+        applyInFlight = true;
+        var ret = config.onApply(result);
+        if (ret && typeof ret.then === 'function') {
+            ret.then(close, function () { applyInFlight = false; applyBtn.disabled = false; });
+        } else {
+            close();
+        }
+    });
+
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    return { close: close };
+}
+
+// message - text shown in the snackbar
+// onUndo  - function(): may return a Promise; the snackbar dismisses on resolve
+function segmentReportingShowOffsetSnackbar(message, onUndo) {
+    var existing = document.querySelector('.segment-offset-snackbar');
+    if (existing) { existing.remove(); }
+
+    var bar = document.createElement('div');
+    bar.className = 'segment-offset-snackbar';
+    bar.style.cssText = 'position: fixed; bottom: 1.5em; left: 50%; transform: translateX(-50%); background: #323232; color: #fff; padding: 0.75em 1.25em; border-radius: 4px; box-shadow: 0 2px 10px rgba(0,0,0,0.4); z-index: 1100; display: flex; align-items: center; gap: 1em;';
+
+    var msgEl = document.createElement('span');
+    msgEl.textContent = message;
+    bar.appendChild(msgEl);
+
+    var undoBtn = document.createElement('button');
+    undoBtn.type = 'button';
+    undoBtn.className = 'emby-button';
+    undoBtn.textContent = 'Undo';
+    undoBtn.style.cssText = 'background: transparent; color: #80cbc4; font-weight: bold; padding: 0.2em 0.6em; cursor: pointer;';
+    bar.appendChild(undoBtn);
+
+    var timer = setTimeout(function () { bar.remove(); }, 12000);
+
+    undoBtn.addEventListener('click', function () {
+        clearTimeout(timer);
+        undoBtn.disabled = true;
+        Promise.resolve(onUndo()).then(function () {
+            bar.remove();
+        }, function () {
+            undoBtn.disabled = false;
+        });
+    });
+
+    document.body.appendChild(bar);
+    return bar;
+}
+
 function getSegmentReportingHelpers() {
     return {
         ticksToTime: segmentReportingTicksToTime,
@@ -1190,7 +1502,12 @@ function getSegmentReportingHelpers() {
         positionMenuBelowButton: segmentReportingPositionMenuBelowButton,
         attachMenuCloseHandler: segmentReportingAttachMenuCloseHandler,
         createActionsMenu: segmentReportingCreateActionsMenu,
-        createInlineEditor: segmentReportingCreateInlineEditor
+        createInlineEditor: segmentReportingCreateInlineEditor,
+        buildBulkSetBody: segmentReportingBuildBulkSetBody,
+        applyBulkSet: segmentReportingApplyBulkSet,
+        applyBulkSetStrict: segmentReportingApplyBulkSetStrict,
+        createOffsetModal: segmentReportingCreateOffsetModal,
+        showOffsetSnackbar: segmentReportingShowOffsetSnackbar
     };
 }
 

@@ -689,6 +689,68 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                 });
         }
 
+        function adjustMovieOffset(row, movie) {
+            var orig = {
+                ItemId: movie.ItemId,
+                introStart: movie.IntroStartTicks > 0 ? movie.IntroStartTicks : null,
+                introEnd: movie.IntroEndTicks > 0 ? movie.IntroEndTicks : null,
+                credits: movie.CreditsStartTicks > 0 ? movie.CreditsStartTicks : null
+            };
+
+            function refreshMovieRowById() {
+                var liveRow = view.querySelector('tr[data-item-id="' + movie.ItemId + '"]');
+                refreshMovieRow(liveRow || row, movie);
+            }
+
+            helpers.createOffsetModal({
+                title: 'Adjust timing - ' + (movie.ItemName || 'Movie'),
+                mode: 'individual',
+                isLight: helpers.isLightTheme(view),
+                current: { introStart: orig.introStart, introEnd: orig.introEnd, credits: orig.credits },
+                onApply: function (result) {
+                    var changed = {
+                        ItemId: movie.ItemId,
+                        introStart: (result.introStart != null && result.introStart !== orig.introStart) ? result.introStart : null,
+                        introEnd: (result.introEnd != null && result.introEnd !== orig.introEnd) ? result.introEnd : null,
+                        credits: (result.credits != null && result.credits !== orig.credits) ? result.credits : null
+                    };
+                    if (changed.introStart == null && changed.introEnd == null && changed.credits == null) {
+                        return;
+                    }
+                    var undoItem = {
+                        ItemId: movie.ItemId,
+                        introStart: changed.introStart != null ? orig.introStart : null,
+                        introEnd: changed.introEnd != null ? orig.introEnd : null,
+                        credits: changed.credits != null ? orig.credits : null
+                    };
+
+                    helpers.showLoading();
+                    return helpers.applyBulkSet([changed])
+                        .then(function (res) {
+                            helpers.hideLoading();
+                            if (res && res.failed > 0) {
+                                helpers.showError(res.errors && res.errors.length ? res.errors.join('\n') : 'Some markers failed to update.');
+                                return;
+                            }
+                            refreshMovieRowById();
+                            helpers.showOffsetSnackbar('Timing adjusted.', function () {
+                                return helpers.applyBulkSet([undoItem])
+                                    .then(refreshMovieRowById)
+                                    .catch(function (err) {
+                                        helpers.showError('Undo failed: ' + (err && err.message ? err.message : 'unknown error'));
+                                        return Promise.reject(err);
+                                    });
+                            });
+                        })
+                        .catch(function (err) {
+                            helpers.hideLoading();
+                            helpers.showError(err && err.message ? err.message : 'Failed to adjust timing.');
+                            return Promise.reject(err);
+                        });
+                }
+            });
+        }
+
         // ── Movie Actions Menu ──
 
         function showMovieActionsMenu(row, movie, buttonEl) {
@@ -706,6 +768,12 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                 e.stopPropagation();
                 menu.remove();
                 startMovieEdit(row, movie);
+            }));
+
+            menu.appendChild(helpers.createMenuItem('Adjust timing', true, colors, function (e) {
+                e.stopPropagation();
+                menu.remove();
+                adjustMovieOffset(row, movie);
             }));
 
             menu.appendChild(helpers.createMenuDivider(colors));
