@@ -1051,9 +1051,13 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                                 helpers.showError(res.errors && res.errors.length ? res.errors.join('\n') : 'Some markers failed to update.');
                                 return;
                             }
-                            refreshRow(row, ep);
+                            if (seasonIdForRefresh && seasonContainer) {
+                                refreshSeasonEpisodes(seasonIdForRefresh, seasonContainer);
+                            } else {
+                                refreshRow(row, ep);
+                            }
                             helpers.showOffsetSnackbar('Timing adjusted.', function () {
-                                return helpers.applyBulkSet([undoItem])
+                                return helpers.applyBulkSetStrict([undoItem])
                                     .then(function () {
                                         if (seasonIdForRefresh && seasonContainer) {
                                             refreshSeasonEpisodes(seasonIdForRefresh, seasonContainer);
@@ -1136,7 +1140,7 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                             }
                             refreshSeasonEpisodes(seasonId, container);
                             helpers.showOffsetSnackbar(msg + '.', function () {
-                                return helpers.applyBulkSet(undo)
+                                return helpers.applyBulkSetStrict(undo)
                                     .then(function () {
                                         refreshSeasonEpisodes(seasonId, container);
                                     })

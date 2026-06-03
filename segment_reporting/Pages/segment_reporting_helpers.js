@@ -1176,6 +1176,23 @@ function segmentReportingApplyBulkSet(items) {
         });
 }
 
+// Strict variant for undo/restore flows. The main-apply callers inspect
+// res.failed themselves (to show "Adjusted X, Y failed" partial-success
+// messaging), but undo handlers rely on promise rejection to keep the
+// snackbar open. This variant also rejects on in-band item failures so a
+// failed restore cannot dismiss as if it succeeded.
+function segmentReportingApplyBulkSetStrict(items) {
+    return segmentReportingApplyBulkSet(items).then(function (res) {
+        if (res && res.failed > 0) {
+            var msg = res.errors && res.errors.length
+                ? res.errors.join('; ')
+                : res.failed + ' item(s) failed';
+            return Promise.reject(new Error(msg));
+        }
+        return res;
+    });
+}
+
 // config:
 //   title    - string heading
 //   mode     - 'individual' | 'bulk'
@@ -1488,6 +1505,7 @@ function getSegmentReportingHelpers() {
         createInlineEditor: segmentReportingCreateInlineEditor,
         buildBulkSetBody: segmentReportingBuildBulkSetBody,
         applyBulkSet: segmentReportingApplyBulkSet,
+        applyBulkSetStrict: segmentReportingApplyBulkSetStrict,
         createOffsetModal: segmentReportingCreateOffsetModal,
         showOffsetSnackbar: segmentReportingShowOffsetSnackbar
     };

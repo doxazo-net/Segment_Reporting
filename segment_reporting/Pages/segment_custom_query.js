@@ -2082,7 +2082,7 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                             }
                             executeQuery();
                             helpers.showOffsetSnackbar('Timing adjusted.', function () {
-                                return helpers.applyBulkSet([undoItem])
+                                return helpers.applyBulkSetStrict([undoItem])
                                     .then(function () { executeQuery(); })
                                     .catch(function (err) {
                                         helpers.showError('Undo failed: ' + (err && err.message ? err.message : 'unknown error'));
@@ -2176,7 +2176,7 @@ define([Dashboard.getConfigurationResourceUrl('segment_reporting_helpers.js')], 
                             }
                             executeQuery();
                             helpers.showOffsetSnackbar(msg + '.', function () {
-                                return helpers.applyBulkSet(undo)
+                                return helpers.applyBulkSetStrict(undo)
                                     .then(function () { executeQuery(); })
                                     .catch(function (err) {
                                         helpers.showError('Undo failed: ' + (err && err.message ? err.message : 'unknown error'));
