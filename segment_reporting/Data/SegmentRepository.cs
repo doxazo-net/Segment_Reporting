@@ -1051,6 +1051,14 @@ namespace segment_reporting.Data
 
         internal static bool IsAllowedPragma(string trimmedSql)
         {
+            // Defense-in-depth: never throw for any input. "PRAGMA" is 6 chars,
+            // so anything shorter cannot be an allowed pragma and would otherwise
+            // make Substring(6) throw ArgumentOutOfRangeException.
+            if (trimmedSql.Length < 6)
+            {
+                return false;
+            }
+
             // Extract pragma name from "PRAGMA [schema.]name" or "PRAGMA [schema.]name(...)"
             var afterPragma = trimmedSql.Substring(6).TrimStart();
 
