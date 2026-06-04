@@ -977,6 +977,7 @@ function segmentReportingCreateInlineEditor(config) {
 
     var row = config.row;
     var active = false;
+    var saveInFlight = false;
 
     function getMarkerType(cell) {
         var marker = cell.getAttribute('data-marker');
@@ -1031,6 +1032,10 @@ function segmentReportingCreateInlineEditor(config) {
             // default behavior - per the resolved design, in-text-field nudging
             // is out of scope and arrows must never be hijacked on text inputs.
             input.addEventListener('keydown', function (e) {
+                // Ignore Enter/Escape while a save is in flight so a held or
+                // double Enter cannot enqueue duplicate writes and Escape cannot
+                // cancel mid-write.
+                if (saveInFlight) return;
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     save();
@@ -1063,9 +1068,19 @@ function segmentReportingCreateInlineEditor(config) {
         if (config.onStart) config.onStart();
     }
 
-    function save() {
+    function setActionsDisabled(disabled) {
         var saveBtn = row.querySelector('.btn-save');
-        if (saveBtn) saveBtn.disabled = true;
+        var cancelBtn = row.querySelector('.btn-cancel');
+        if (saveBtn) saveBtn.disabled = disabled;
+        if (cancelBtn) cancelBtn.disabled = disabled;
+    }
+
+    function save() {
+        // Guard against re-entry (held/double Enter, repeated clicks) so a save
+        // already in flight cannot enqueue a duplicate set of write requests.
+        if (saveInFlight) return;
+        saveInFlight = true;
+        setActionsDisabled(true);
 
         var inputs = row.querySelectorAll('.tick-cell input');
         var updates = [];
@@ -1086,7 +1101,8 @@ function segmentReportingCreateInlineEditor(config) {
 
             var newTicks = segmentReportingTimeToTicks(newValue);
             if (newTicks === 0 && newValue !== '00:00:00.000') {
-                if (saveBtn) saveBtn.disabled = false;
+                saveInFlight = false;
+                setActionsDisabled(false);
                 segmentReportingShowError('Invalid time format for ' + getMarkerType(cell) + '. Use HH:MM:SS.fff');
                 return;
             }
@@ -1097,6 +1113,10 @@ function segmentReportingCreateInlineEditor(config) {
         }
 
         if (updates.length === 0) {
+            // No effective changes: clear the in-flight flag (no write happens)
+            // so cancel() runs and the row is restored instead of no-opping.
+            saveInFlight = false;
+            setActionsDisabled(false);
             cancel();
             return;
         }
@@ -1125,11 +1145,17 @@ function segmentReportingCreateInlineEditor(config) {
 
         chain
             .then(function () {
+                saveInFlight = false;
+                setActionsDisabled(false);
                 segmentReportingHideLoading();
                 segmentReportingShowSuccess('Segments updated successfully.');
                 if (config.onSaveComplete) config.onSaveComplete(updates);
             })
             .catch(function (error) {
+                // Re-enable the buttons so the row (still in edit mode) can be
+                // retried or cancelled, and clear the guard.
+                saveInFlight = false;
+                setActionsDisabled(false);
                 segmentReportingHideLoading();
                 console.error('Failed to save segments:', error);
                 segmentReportingShowError('Failed to save segment changes.');
@@ -1137,6 +1163,9 @@ function segmentReportingCreateInlineEditor(config) {
     }
 
     function cancel() {
+        // Do not cancel while a write is in flight; the buttons are disabled in
+        // that state, but guard the keyboard/programmatic paths too.
+        if (saveInFlight) return;
         restoreDisplay();
         if (config.onCancel) config.onCancel();
     }

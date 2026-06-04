@@ -412,7 +412,7 @@ inside the dialog until you close it.
 
 When the dialog closes, focus returns to the control you opened it from.
 
-### Inline Editing
+### Inline Editor Keyboard Controls
 
 While editing a row's time fields in the inline editor:
 
