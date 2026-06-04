@@ -161,6 +161,14 @@ async function main() {
     const wantTree = process.env.AXE_TREE === '1';
     const targets = PAGES.filter((p) => !only || only.includes(p.key));
 
+    if (only && targets.length === 0) {
+        console.error(
+            `AXE_ONLY="${process.env.AXE_ONLY}" matched no pages. ` +
+            `Available keys: ${PAGES.map((p) => p.key).join(', ')}`
+        );
+        process.exit(1);
+    }
+
     const browser = await chromium.launch({ headless: true });
     const context = await browser.newContext({
         viewport: VIEWPORT,
