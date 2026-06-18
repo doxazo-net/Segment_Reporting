@@ -35,6 +35,11 @@ jobs:
             build-mode: autobuild
           - language: javascript-typescript
             build-mode: none
+            # Path-scoped exclusion of the generated docs/plugins_mockup.html
+            # bundle artifact (see .github/codeql/codeql-config.yml). Set on the
+            # JS leg only; empty for the actions/csharp legs, which codeql-action
+            # treats as "no config" (default behavior).
+            config-file: ./.github/codeql/codeql-config.yml
 
     steps:
       - name: Checkout
@@ -68,6 +73,7 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
+          config-file: ${{ matrix.config-file }}
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
