@@ -1,0 +1,19 @@
+name: "CodeQL config (JavaScript/TypeScript)"
+
+# Exclude the standalone plugins mockup page from CodeQL JavaScript analysis.
+#
+# docs/plugins_mockup.html is a generated, self-contained bundle artifact: the
+# <script type="__bundler/template"> blob and manifest are emitted by an external
+# bundler tool, not hand-authored. Its self-unpacking runtime reads its own
+# build-time-embedded bundle out of a script tag and reinterprets it as HTML via
+# DOMParser, which CodeQL traces as js/xss-through-dom (alert #19). The template
+# is first-party build output, not attacker-controlled input, so exploitability
+# is low.
+#
+# We exclude only this one generated file (path-scoped) rather than disabling the
+# js/xss-through-dom rule via query-filters, so genuine XSS in the actual plugin
+# pages is still analyzed. A path-ignore (vs. a hand-edited suppression in the
+# file, which would be lost on regeneration, or an inline codeql[...] comment,
+# which GitHub Code Scanning does not honor) is the durable, scan-respected fix.
+paths-ignore:
+  - docs/plugins_mockup.html
