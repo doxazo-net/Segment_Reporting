@@ -46,4 +46,4 @@ embylibs/
 segment_reporting/embylibs/
 
 # Orchestrate session checkpoint (machine-local, transient; never committed)
-SESSION-STATE.md
+/SESSION-STATE.md
