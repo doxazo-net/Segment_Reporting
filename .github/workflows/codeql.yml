@@ -13,6 +13,11 @@ concurrency:
   group: codeql-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Emby prunes old releases from MediaBrowser/Emby.Releases, so a pinned version
+# eventually 404s rather than merely going stale. Keep it in one place per workflow.
+env:
+  EMBY_VERSION: "4.10.0.19"
+
 permissions:
   contents: read
 
@@ -53,13 +58,13 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Fetch Emby 4.10.0.13 reference assemblies
+      - name: Fetch Emby ${{ env.EMBY_VERSION }} reference assemblies
         if: matrix.language == 'csharp'
         run: |
           set -euo pipefail
           mkdir -p segment_reporting/embylibs
           extract_dir="$(mktemp -d)"
-          url="https://github.com/MediaBrowser/Emby.Releases/releases/download/4.10.0.13/emby-server-freebsd14_4.10.0.13_amd64.tar.xz"
+          url="https://github.com/MediaBrowser/Emby.Releases/releases/download/${EMBY_VERSION}/emby-server-freebsd14_${EMBY_VERSION}_amd64.tar.xz"
           curl -fsSL "$url" -o /tmp/emby.tar.xz
           tar xJf /tmp/emby.tar.xz -C "$extract_dir" --wildcards \
             '*/MediaBrowser.Model.dll' '*/MediaBrowser.Common.dll' \
