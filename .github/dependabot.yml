@@ -1,4 +1,13 @@
 version: 2
+
+# Coverage note: every pinned artifact below is Dependabot-managed, including
+# SHA-pinned actions (Dependabot rewrites both the hash and its "# vX" comment).
+# The one deliberate exception is the Node major in /.nvmrc: Dependabot has no
+# updater for that file. It pins a major only ("24"), so CI picks up patch and
+# minor Node releases on its own and only the yearly major bump is a manual
+# edit. Locally a version manager honours .nvmrc only after one-time shell
+# setup (see docs/DEVELOPER.md). Pinning an exact Node version here would rot
+# silently instead.
 updates:
   - package-ecosystem: nuget
     directory: /
