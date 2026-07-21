@@ -13,11 +13,6 @@ concurrency:
   group: codeql-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Emby prunes old releases from MediaBrowser/Emby.Releases, so a pinned version
-# eventually 404s rather than merely going stale. Keep it in one place per workflow.
-env:
-  EMBY_VERSION: "4.10.0.19"
-
 permissions:
   contents: read
 
@@ -52,14 +47,27 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Read pinned Emby version
+        id: emby
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < .emby-version)"
+          if [ -z "$version" ]; then
+            echo "::error file=.emby-version::.emby-version is empty"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Setup .NET
         if: matrix.language == 'csharp'
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '8.0.x'
 
-      - name: Fetch Emby ${{ env.EMBY_VERSION }} reference assemblies
+      - name: Fetch Emby ${{ steps.emby.outputs.version }} reference assemblies
         if: matrix.language == 'csharp'
+        env:
+          EMBY_VERSION: ${{ steps.emby.outputs.version }}
         run: |
           set -euo pipefail
           mkdir -p segment_reporting/embylibs

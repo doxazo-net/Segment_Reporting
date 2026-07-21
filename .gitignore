@@ -47,3 +47,8 @@ segment_reporting/embylibs/
 
 # Orchestrate session checkpoint (machine-local, transient; never committed)
 /SESSION-STATE.md
+
+# Private keys must never be committed. A GitHub App private key was once
+# downloaded into the repo root, where it was untracked but stageable.
+*.pem
+*.key

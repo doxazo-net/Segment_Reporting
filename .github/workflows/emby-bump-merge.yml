@@ -1,0 +1,63 @@
+# Auto-merges an Emby pin bump only when the pin is already dead, and only once
+# the full build has passed. Rationale: green CI on the new pin proves the ABI
+# still compiles, and leaving the pipeline red helps nobody. Routine and stale
+# bumps are deliberately excluded and wait for human review.
+#
+# gh pr merge --auto is unavailable here because main is unprotected, so this
+# mirrors the existing dependabot-merge.yml workflow_run pattern.
+
+name: Merge urgent Emby pin bumps
+
+on:
+  workflow_run:
+    workflows: ["Build and Release"]
+    types:
+      - completed
+
+permissions: {}
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    permissions: {}
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'chore/emby-version-')
+    concurrency:
+      group: emby-bump-merge-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Mint App token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        with:
+          app-id: ${{ secrets.EMBY_BUMP_APP_ID }}
+          private-key: ${{ secrets.EMBY_BUMP_APP_KEY }}
+
+      - name: Merge if urgent and fully green
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          pr=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
+                --json number,labels --jq '.[0] | select(.labels[].name == "emby-pin-urgent") | .number' || true)
+          if [ -z "$pr" ]; then
+            echo "No open urgent bump PR for $BRANCH. Nothing to merge."
+            exit 0
+          fi
+
+          # The triggering workflow is only one of several checks. Require every
+          # check to have finished and none to have failed before merging.
+          pending=$(gh pr checks "$pr" --repo "$REPO" --json state --jq '[.[] | select(.state == "PENDING")] | length')
+          failed=$(gh pr checks "$pr" --repo "$REPO" --json state --jq '[.[] | select(.state == "FAILURE" or .state == "ERROR")] | length')
+          if [ "$pending" -ne 0 ] || [ "$failed" -ne 0 ]; then
+            echo "PR #$pr not ready: $pending pending, $failed failed. Not merging."
+            exit 0
+          fi
+
+          gh pr merge "$pr" --repo "$REPO" --squash --delete-branch
+          echo "Merged PR #$pr"
