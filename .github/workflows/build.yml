@@ -115,8 +115,17 @@ jobs:
       - name: Verify package-lock.json is in sync
         run: |
           set -euo pipefail
+          # Assert the lockfile is tracked before regenerating. If it were
+          # deleted in the commit, npm would recreate it as an untracked file
+          # and git diff would report nothing, passing this check silently.
+          if ! git ls-files --error-unmatch segment_reporting/package-lock.json >/dev/null 2>&1; then
+            echo "::error::segment_reporting/package-lock.json is not tracked in git. It must be committed."
+            exit 1
+          fi
           npm install --prefix segment_reporting --package-lock-only --ignore-scripts
-          if ! git diff --exit-code -- segment_reporting/package-lock.json; then
+          # git status, not git diff: porcelain also reports an untracked file.
+          if [ -n "$(git status --porcelain -- segment_reporting/package-lock.json)" ]; then
+            git diff -- segment_reporting/package-lock.json || true
             echo "::error file=segment_reporting/package-lock.json::Lockfile is out of sync with package.json. Run 'npm install --package-lock-only' in segment_reporting/ on the Node version in .nvmrc, then commit the result."
             exit 1
           fi
@@ -138,7 +147,7 @@ jobs:
           fi
 
   release:
-    needs: build
+    needs: [build, lockfile]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:

@@ -2300,8 +2300,16 @@ jobs: **build** (runs on every push and PR), **lockfile** (likewise), and
 ### Node version pin
 
 `.nvmrc` at the repo root is the single source of truth for the Node major used
-to build this project. CI reads it through `setup-node`'s `node-version-file`;
-`nvm`, `fnm`, and `asdf` read it automatically in a local shell.
+to build this project. CI reads it through `setup-node`'s `node-version-file`.
+
+Locally, no version manager honours it automatically out of the box -- each
+needs one-time shell setup, or an explicit `nvm use` / `fnm use` per shell:
+
+| Manager | One-time setup for automatic switching |
+|---------|----------------------------------------|
+| `nvm`   | No built-in support; add the `cd` hook function from the nvm README to `~/.zshrc` |
+| `fnm`   | `eval "$(fnm env --use-on-cd --shell zsh)"` |
+| `asdf`  | `legacy_version_file = yes` in `~/.asdfrc` (asdf reads `.tool-versions` natively) |
 
 Using the pinned major locally is not cosmetic. Node 24 ships npm 11, and npm 10
 writes an **older lockfile schema** -- it silently strips the `libc` metadata
