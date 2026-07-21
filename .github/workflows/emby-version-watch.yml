@@ -27,6 +27,13 @@ jobs:
         with:
           app-id: ${{ secrets.EMBY_BUMP_APP_ID }}
           private-key: ${{ secrets.EMBY_BUMP_APP_KEY }}
+          # Without these the token inherits every permission the App
+          # installation holds. Request the three this job actually uses:
+          # contents to push the branch, pull-requests to open the PR,
+          # issues to file the urgent tracking issue.
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

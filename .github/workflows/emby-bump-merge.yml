@@ -34,6 +34,10 @@ jobs:
         with:
           app-id: ${{ secrets.EMBY_BUMP_APP_ID }}
           private-key: ${{ secrets.EMBY_BUMP_APP_KEY }}
+          # Narrower than the watcher's token: this job only reads checks and
+          # merges. It never files an issue, so issues access is not requested.
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Merge if urgent and fully green
         env:

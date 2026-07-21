@@ -48,6 +48,29 @@ test('classify returns stale when pinned is in the oldest two survivors', () => 
   assert.equal(r.target, '4.10.0.20');
 });
 
+test('classify never targets the pinned version in a small window', () => {
+  // Regression: with <= STALE_EDGE survivors and the pin already newest, the
+  // stale branch used to return target === pinned. The watcher would then
+  // commit an unchanged file and fail the scheduled run.
+  const r = classify({ pinned: '4.10.0.20', available: ['4.10.0.19', '4.10.0.20'] });
+  assert.notEqual(r.target, '4.10.0.20');
+  assert.equal(r.status, 'ok');
+  assert.equal(r.target, null);
+});
+
+test('classify handles a single surviving release that is the pin', () => {
+  const r = classify({ pinned: '4.10.0.19', available: ['4.10.0.19'] });
+  assert.equal(r.status, 'ok');
+  assert.equal(r.target, null);
+});
+
+test('classify still reports stale when a newer release exists in a small window', () => {
+  // The guard must not suppress a genuine stale signal.
+  const r = classify({ pinned: '4.10.0.19', available: ['4.10.0.19', '4.10.0.20'] });
+  assert.equal(r.status, 'stale');
+  assert.equal(r.target, '4.10.0.20');
+});
+
 test('classify returns routine when a newer in-line release exists', () => {
   const r = classify({
     pinned: '4.10.0.19',

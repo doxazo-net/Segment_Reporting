@@ -52,7 +52,14 @@ export function classify({ pinned, available }) {
     };
   }
 
-  if (index < STALE_EDGE) {
+  // `newest !== pinned` is load-bearing, not redundant with the check below.
+  // When the surviving window shrinks to STALE_EDGE or fewer and the pin is
+  // already the newest, index is still < STALE_EDGE, so without this guard the
+  // stale branch returns target === pinned. The watcher would then branch,
+  // rewrite .emby-version to the value it already holds, and commit nothing,
+  // failing the scheduled run. Being pinned to the newest survivor is 'ok'
+  // even in a small window: there is nothing to bump to.
+  if (index < STALE_EDGE && newest !== pinned) {
     return {
       status: 'stale',
       target: newest,
