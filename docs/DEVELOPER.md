@@ -2293,9 +2293,58 @@ Tasks can be triggered in three ways:
 
 ### Workflow Overview
 
-The CI/CD pipeline is defined in `.github/workflows/build.yml` and has two jobs:
-**build** (runs on every push and PR) and **release** (runs only on version
-tags).
+The CI/CD pipeline is defined in `.github/workflows/build.yml` and has three
+jobs: **build** (runs on every push and PR), **lockfile** (likewise), and
+**release** (runs only on version tags).
+
+### Node version pin
+
+`.nvmrc` at the repo root is the single source of truth for the Node major used
+to build this project. CI reads it through `setup-node`'s `node-version-file`;
+`nvm`, `fnm`, and `asdf` read it automatically in a local shell.
+
+Using the pinned major locally is not cosmetic. Node 24 ships npm 11, and npm 10
+writes an **older lockfile schema** -- it silently strips the `libc` metadata
+that npm uses to pick glibc vs musl builds of optional platform binaries
+(`sharp`, `rollup`). Running `npm install` under Node 22 therefore rewrites
+`package-lock.json` with ~90 lines of unrelated churn and a real (if latent)
+loss of correctness for musl installs. The **lockfile** job below rejects that.
+
+Only `npm install` / `npm update` write the lockfile. `npm ci` -- what CI and the
+csproj Release target run -- never does, which is why this drift can survive a
+green build.
+
+### Lockfile Job
+
+Two separate checks, because neither catches the other's failure mode.
+
+**1. In-sync check** -- regenerate in place; the result must be unchanged:
+
+```bash
+npm install --prefix segment_reporting --package-lock-only --ignore-scripts
+git diff --exit-code -- segment_reporting/package-lock.json
+```
+
+Catches a `package.json` edit committed without a matching lock refresh. Fix by
+running the same command on the pinned Node version and committing the result.
+
+**2. Schema canary** -- the lockfile must still contain `"libc"` fields:
+
+```bash
+grep -q '"libc"' segment_reporting/package-lock.json
+```
+
+Catches a lock rewritten by npm 10 or older. Check 1 cannot see this: npm treats
+an existing complete lockfile as authoritative and will not re-derive metadata
+that is already absent, so a stripped lock regenerates to itself and looks
+clean. The stripping is all-or-nothing (all 29 fields or none), so presence is a
+sufficient signal. Fix by deleting the lockfile and reinstalling on the pinned
+Node version.
+
+Regenerating from scratch (`rm package-lock.json && npm install
+--package-lock-only`) would catch both, but it re-resolves every semver range,
+so the job would turn red whenever any upstream package publishes a release --
+a gate that fails for reasons unrelated to the PR gets ignored or disabled.
 
 ### Build Job
 
@@ -2306,11 +2355,13 @@ branches. Runs on `ubuntu-latest`.
 
 1. **Checkout** -- `actions/checkout@v6` (SHA-pinned)
 2. **Setup .NET** -- `actions/setup-dotnet@v5` (SHA-pinned) with .NET 8.0.x
-3. **Setup Node.js** -- `actions/setup-node@v6` (SHA-pinned) with Node 24
-4. **Fetch Emby 4.10.0.13 reference assemblies** -- downloads the pinned Emby
-   server package and extracts `MediaBrowser.*.dll` + `Emby.Naming.dll` into
-   `segment_reporting/embylibs/` (the gitignored 4.10 ABI references the build
-   binds to; NuGet has no 4.10.0.13)
+3. **Setup Node.js** -- `actions/setup-node@v6` (SHA-pinned), reading the version
+   from `.nvmrc` via `node-version-file` so CI and local shells share one pin
+4. **Fetch Emby reference assemblies** -- downloads the Emby server package
+   pinned by the `EMBY_VERSION` workflow env var and extracts
+   `MediaBrowser.*.dll` + `Emby.Naming.dll` into `segment_reporting/embylibs/`
+   (the gitignored 4.10 ABI references the build binds to; NuGet has no 4.10
+   packages)
 5. **Install JS build tools** -- `npm ci --prefix segment_reporting`
 6. **Minify JS** -- `npm run build:js --prefix segment_reporting` (esbuild
    minification of the 7 custom JS files)

@@ -43,7 +43,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
-          node-version: '24'
+          node-version-file: '.nvmrc'
 
       - name: Fetch Emby ${{ env.EMBY_VERSION }} reference assemblies
         run: |
@@ -92,6 +92,51 @@ jobs:
       - name: Verify 4.9 ABI also compiles
         run: dotnet build segment_reporting/segment_reporting.csproj -c Release -p:EmbyAbi=4.9 -warnaserror
 
+  lockfile:
+    name: Lockfile integrity
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version-file: '.nvmrc'
+
+      # Regenerating in place must be a no-op: catches a package.json edit that
+      # landed without a matching lock refresh. npm ci never writes the lock, so
+      # neither the build job nor the csproj Release target surfaces this.
+      - name: Verify package-lock.json is in sync
+        run: |
+          set -euo pipefail
+          npm install --prefix segment_reporting --package-lock-only --ignore-scripts
+          if ! git diff --exit-code -- segment_reporting/package-lock.json; then
+            echo "::error file=segment_reporting/package-lock.json::Lockfile is out of sync with package.json. Run 'npm install --package-lock-only' in segment_reporting/ on the Node version in .nvmrc, then commit the result."
+            exit 1
+          fi
+
+      # Separate check, because the one above cannot catch this: npm treats an
+      # existing complete lock as authoritative and will not re-derive missing
+      # metadata, so a lock already rewritten by an old npm regenerates to
+      # itself and looks clean. npm 10 and older strip every "libc" field, the
+      # metadata npm uses to pick glibc vs musl builds of optional binaries
+      # (sharp, rollup). The failure is all-or-nothing, so presence is a
+      # sufficient canary. Regenerating from scratch would detect it too, but
+      # re-resolves semver ranges and would go red on any upstream release.
+      - name: Verify lockfile was written by a current npm
+        run: |
+          set -euo pipefail
+          if ! grep -q '"libc"' segment_reporting/package-lock.json; then
+            echo "::error file=segment_reporting/package-lock.json::Lockfile is missing all \"libc\" metadata, which means it was rewritten by npm 10 or older. Delete it, reinstall on the Node version in .nvmrc (npm 11+), and commit the result."
+            exit 1
+          fi
+
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -113,7 +158,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
         with:
-          node-version: '24'
+          node-version-file: '.nvmrc'
 
       - name: Fetch Emby ${{ env.EMBY_VERSION }} reference assemblies
         run: |
