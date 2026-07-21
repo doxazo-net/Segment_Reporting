@@ -2322,6 +2322,39 @@ Only `npm install` / `npm update` write the lockfile. `npm ci` -- what CI and th
 csproj Release target run -- never does, which is why this drift can survive a
 green build.
 
+### Emby version pin
+
+`.emby-version` at the repo root is the single source of truth for the Emby
+release whose reference assemblies the 4.10 ABI compiles against. Both
+`build.yml` and `codeql.yml` read it; neither hardcodes a version.
+
+Emby deletes old 4.10.x pre-releases from `MediaBrowser/Emby.Releases` on a
+short rolling window, so a static pin eventually 404s and breaks CI for reasons
+unrelated to this repo (see issue #165). The `Emby version watch` workflow runs
+weekly and classifies the pin:
+
+| Status | Meaning | Action |
+|--------|---------|--------|
+| `urgent` | the pinned release is gone; CI is broken now | bump PR plus tracking issue; auto-merges once every check passes |
+| `stale` | the pin is among the two oldest survivors | bump PR, human review |
+| `routine` | a newer in-line release exists | bump PR, human review |
+| `ok` | the pin is the newest survivor | nothing |
+
+Releases from a different line (4.11.x) are ignored. Crossing a line retargets
+the plugin ABI, which stays a deliberate human edit of `.emby-version` -- the
+4.9 to 4.10 ABI break is why the plugin builds dual-ABI at all.
+
+To bump deliberately, edit `.emby-version` and open a PR. That is the whole
+procedure; nothing else references the version.
+
+The watcher opens PRs as the `segrep-emby-bump` GitHub App rather than with
+`GITHUB_TOKEN`, because GitHub suppresses workflow runs for events raised by
+the default token -- a PR it created would receive no CI at all. The App is
+installed on this repository only, with contents, pull-requests, and issues
+write access; the Workflows permission is deliberately withheld so the bumper
+can never modify a workflow file. Its credentials live in the repository
+secrets `EMBY_BUMP_APP_ID` and `EMBY_BUMP_APP_KEY`.
+
 ### Lockfile Job
 
 Two separate checks, because neither catches the other's failure mode.
